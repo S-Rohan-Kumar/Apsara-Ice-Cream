@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Firebase Phone Auth Test</title>
+</head>
+
+<body>
+
+<h2>Firebase Phone Login Test</h2>
+
+<button onclick="sendOTP()">Send OTP</button>
+
+<br><br>
+
+<input type="text" id="otp" placeholder="Enter OTP">
+
+<button onclick="verifyOTP()">Verify OTP</button>
+
+<p id="token"></p>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
+import {
+  getAuth,
+  signInWithPhoneNumber,
+  RecaptchaVerifier
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+
+// 🔥 YOUR FIREBASE CONFIG HERE
+
+const firebaseConfig = {
+
+  apiKey: "AIzaSyAYT3GtALjjMjAZV5cIn0-xyienw6tgsb8",
+
+  authDomain: "apsara-ice-cream-c438f.firebaseapp.com",
+
+};
+
+
+const app = initializeApp(firebaseConfig);
+
+const auth = getAuth(app);
+
+
+window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+  size: 'invisible'
+});
+
+
+let confirmationResult;
+
+
+// SEND OTP
+
+window.sendOTP = async () => {
+
+confirmationResult = await signInWithPhoneNumber(
+
+auth,
+
+"+917892547141",
+
+window.recaptchaVerifier
+
+);
+
+alert("OTP Sent");
+
+};
+
+
+
+// VERIFY OTP
+
+window.verifyOTP = async () => {
+
+const otp = document.getElementById("otp").value;
+
+const result = await confirmationResult.confirm(otp);
+
+const token = await result.user.getIdToken();
+
+document.getElementById("token").innerText = token;
+
+console.log("TOKEN:", token);
+
+};
+
+</script>
+
+
+<div id="recaptcha-container"></div>
+
+
+</body>
+
+</html>
