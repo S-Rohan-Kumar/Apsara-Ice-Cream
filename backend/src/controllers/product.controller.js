@@ -1,0 +1,170 @@
+import { asyncHandler } from "../utils/async-handler.js";
+import { APIResponse } from "../utils/api-response.js";
+import { APIError } from "../utils/api-error.js";
+import Product from "../models/product.model.js";
+import Category from "../models/category.model.js";
+import Offer from "../models/offer.model.js";
+import {
+  uploadOnCloudinary,
+  deleteFromCloundnary,
+} from "../utils/cloudinary.js";
+
+//Pricing helper
+const resolvePrice = (product, category, activeOffers) => {
+  const base = {
+    small: product.priceOverride?.small ?? category.basePrice.small,
+    regular: product.priceOverride?.regular ?? category.basePrice.regular,
+    large: product.priceOverride?.large ?? category.basePrice.large,
+    binge: product.priceOverride?.binge ?? category.basePrice.binge,
+  };
+
+  const offer = activeOffers.find(
+    (o) =>
+      o.category === null || o.category?.toString() === category._id.toString(),
+  );
+
+  if (!offer) return base;
+
+  const disc = offer.discountPercent / 100;
+  return {
+    small: Math.round(base.small * (1 - disc)),
+    regular: Math.round(base.regular * (1 - disc)),
+    large: Math.round(base.large * (1 - disc)),
+    binge: Math.round(base.binge * (1 - disc)),
+  };
+};
+
+//GET /api/products/
+const getProducts = asyncHandler(async (req, res) => {
+  const { category, zeroSugar } = req.query;
+  const filter = { isActive: true, isAvailable: true };
+  if (category) filter.category = category;
+  if (zeroSugar) filter.isZeroSugar = zeroSugar === "true";
+  const products = await Product.find(filter)
+    .populate("category", "name basePrice")
+    .sort({ sortOrder: 1 });
+
+  const now = Date.now();
+  const activeOffers = await Offer.find({
+    isActive: true,
+    startsAt: { $lte: now },
+    expiresAt: { $gte: now },
+  });
+
+  const data = products.map((prod) => {
+    const p = prod.toObject();
+    p.resolvedPrices = resolvePrice(prod, prod.category, activeOffers);
+    return p;
+  });
+
+  return res.status(200).json(new APIResponse(200, data, "Products fetched"));
+});
+
+//GET /api/producs/:id
+const getProductDetails = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id).populate(
+    "category",
+    "name basePrice",
+  );
+  if (!product || !product.isActive)
+    throw new APIError(404, "Product not found");
+  const now = Date.now();
+  const activeOffers = await Offer.find({
+    isActive: true,
+    startsAt: { $lte: now },
+    expiresAt: { $gte: now },
+  });
+  const data = product.toObject();
+  data.resolvedPrices = resolvePrice(product, product.category, activeOffers);
+  return res.status(200).json(new APIResponse(200, data, "Product fetched"));
+});
+
+//POST /api/products/
+const createProduct = asyncHandler(async (req, res) => {
+  const { name, category, isZeroSugar, priceOverride, sortOrder } = req.body;
+
+  if (!name || !category) throw new APIError(400, "Invalid request body");
+
+  const cat = await Category.findById(category);
+  if (!cat) throw new APIError(404, "Category not found");
+
+  let imageUrl = ''
+  if (req.file) {
+    const uploaded = await uploadOnCloudinary(req.file.path);
+    if (uploaded) imageUrl = uploaded.secure_url;
+  }
+
+  const product = await Product.create({
+    name,
+    category,
+    imageUrl,
+    isZeroSugar: isZeroSugar === "true" || isZeroSugar === true,
+    priceOverride: priceOverride || {},
+    sortOrder: sortOrder || 0,
+  });
+
+  return res.status(201).json(new APIResponse(201, product, "Product created"));
+});
+
+//PATCH /api/products/:id
+const updateProduct = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  if (!product) throw new APIError(404, "Product not found");
+
+  const allowed = [
+    "name",
+    "category",
+    "imageUrl",
+    "isZeroSugar",
+    "priceOverride",
+    "sortOrder",
+  ];
+
+  allowed.forEach((field) => {
+    if (req.body[field] !== undefined) product[field] = req.body[field];
+  });
+
+  if (req.file) {
+    const uploaded = await uploadOnCloudinary(req.file.path);
+    if (uploaded) product.imageUrl = uploaded.secure_url;
+  }
+  await product.save();
+
+  return res.status(200).json(new APIResponse(200, product, "Product updated"));
+});
+
+//PATCH /api/products/:id/toggle-stock
+const toggleStock = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  if (!product) throw new APIError(404, "Product not found");
+
+  product.isAvailable = !product.isAvailable;
+  await product.save();
+
+  return res
+    .status(200)
+    .json(
+      new APIResponse(
+        200,
+        { isAvailable: product.isAvailable },
+        "Stock toggled",
+      ),
+    );
+});
+
+//DELETE /api/products/:id
+const deleteProduct = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  if (!product) throw new APIError(404, "Product not found");
+  await product.deleteOne();
+  return res.status(200).json(new APIResponse(200, null, "Product deleted"));
+});
+
+export {
+  getProducts,
+  getProductDetails,
+  createProduct,
+  updateProduct,
+  toggleStock,
+  deleteProduct,
+};

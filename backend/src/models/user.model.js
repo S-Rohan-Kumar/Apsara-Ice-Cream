@@ -5,7 +5,6 @@ const userSchema = new mongoose.Schema(
     firebaseUid: {
       type: String,
       required: true,
-      unique: true,
     },
 
     phone: {
@@ -68,7 +67,7 @@ const userSchema = new mongoose.Schema(
   },
 );
 
-userSchema.index({ firebaseUid: 1 });
+userSchema.index({ firebaseUid: 1 }, { unique: true });
 userSchema.index({ phone: 1 });
 
 
