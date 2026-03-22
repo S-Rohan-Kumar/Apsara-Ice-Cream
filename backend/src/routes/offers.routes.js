@@ -1,9 +1,5 @@
 import {
-  getactiveoffers,
-  createoffer,
-  updateoffer,
-  deleteoffer,
-  getAllOffers,
+  getActiveOffers, getAllOffers, createOffer, updateOffer, deleteOffer
 } from "../controllers/offers.controller.js";
 import { Router } from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
@@ -11,16 +7,16 @@ import adminMiddleware from "../middleware/admin.middleware.js";
 
 const router = Router();
 
-router.get("/active", getactiveoffers);
+router.get("/active", getActiveOffers);
 
 router
   .route("/")
   .get(authMiddleware, adminMiddleware, getAllOffers)
-  .post(authMiddleware, adminMiddleware, createoffer);
+  .post(authMiddleware, adminMiddleware, createOffer);
 
 router
   .route("/:id")
-  .patch(authMiddleware, adminMiddleware, updateoffer)
-  .delete(authMiddleware, adminMiddleware, deleteoffer);
+  .patch(authMiddleware, adminMiddleware, updateOffer)
+  .delete(authMiddleware, adminMiddleware, deleteOffer);
 
 export default router;

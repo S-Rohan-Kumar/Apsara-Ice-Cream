@@ -25,16 +25,20 @@ const TRANSITIONS = {
 
 //POST /api/orders/
 const initiateOrder = asyncHandler(async (req, res) => {
-  const { items, deliveryPhone  } = req.body;
+  const { items, paymentMethod } = req.body;
 
   if (!items || items.length === 0) {
-    throw new APIError(400, "Order must have at least one item");
+    throw new APIError(400, 'Order must have at least one item');
+  }
+
+  if (!paymentMethod || !['online', 'cod'].includes(paymentMethod)) {
+    throw new APIError(400, 'paymentMethod must be online or cod');
   }
 
   const now = new Date();
   const activeOffers = await Offer.find({
-    isActive: true,
-    startsAt: { $lte: now },
+    isActive : true,
+    startsAt : { $lte: now },
     expiresAt: { $gte: now },
   });
 
@@ -42,56 +46,74 @@ const initiateOrder = asyncHandler(async (req, res) => {
   let discount = 0;
 
   for (const item of items) {
-    const product = await Product.findById(item.productId).populate(
-      "category",
-      "name basePrice",
-    );
+    const product = await Product.findById(item.productId)
+      .populate('category', 'name basePrice');
 
     if (!product || !product.isAvailable || !product.isActive) {
       throw new APIError(400, `Product ${item.productId} is not available`);
     }
 
-    const base =
-      product.priceOverride?.[item.variant] ??
-      product.category.basePrice[item.variant];
+    const base = product.priceOverride?.[item.variant]
+      ?? product.category.basePrice[item.variant];
 
     if (!base) throw new APIError(400, `Invalid variant: ${item.variant}`);
 
-    const offer = activeOffers.find(
-      (o) =>
-        o.category === null ||
-        o.category?.toString() === product.category._id.toString(),
+    const offer = activeOffers.find(o =>
+      !o.category ||
+      o.category.toString() === product.category._id.toString()
     );
 
     const unitPrice = offer
       ? Math.round(base * (1 - offer.discountPercent / 100))
       : base;
-    const itemTotal = unitPrice * item.quantity;
+
     subtotal += base * item.quantity;
     discount += (base - unitPrice) * item.quantity;
   }
 
-  const total = subtotal - discount;
+  const deliveryCharge = 20;
+  const codCharge      = paymentMethod === 'cod' ? 10 : 0;
+  const total          = (subtotal - discount) + deliveryCharge + codCharge;
+ 
+
+  if (!razorpay || paymentMethod === 'cod') {
+    
+    return res.status(200).json(new APIResponse(200, {
+      razorpayOrderId : null,
+      amount          : total * 100,
+      currency        : 'INR',
+      key             : null,
+      paymentMethod,
+      breakdown: {
+        subtotal,
+        discountAmount : discount,
+        deliveryCharge,
+        codCharge,
+        total,
+      },
+    }, 'Order initiated'));
+  }
 
   const rzpOrder = await razorpay.orders.create({
-    amount: total * 100, // paise
-    currency: "INR",
-    receipt: `rcpt_${Date.now()}`,
+    amount  : total * 100,
+    currency: 'INR',
+    receipt : `rcpt_${Date.now()}`,
   });
 
-  return res.status(200).json(
-    new APIResponse(
-      200,
-      {
-        razorpayOrderId: rzpOrder.id,
-        amount: rzpOrder.amount,
-        currency: "INR",
-        key: process.env.RAZORPAY_KEY_ID,
-        breakdown: { subtotal, discountAmount: discount, total },
-      },
-      "Order initiated",
-    ),
-  );
+  return res.status(200).json(new APIResponse(200, {
+    razorpayOrderId : rzpOrder.id,
+    amount          : rzpOrder.amount,
+    currency        : 'INR',
+    key             : process.env.RAZORPAY_KEY_ID,
+    paymentMethod,
+    breakdown: {
+      subtotal,
+      discountAmount : discount,
+      deliveryCharge,
+      codCharge,
+      total,
+    },
+  }, 'Order initiated'));
 });
 
 //POST /api/orders/confirm
@@ -104,119 +126,126 @@ const confirmOrder = asyncHandler(async (req, res) => {
     deliveryAddress,
     deliveryPhone,
     deliveryLocation,
+    paymentMethod,   
   } = req.body;
-  const expected = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest("hex");
-  if (expected !== razorpaySignature) {
-    throw new APIError(400, "Payment verification failed — invalid signature");
+
+  if (paymentMethod === 'online') {
+    const expected = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+
+    if (expected !== razorpaySignature) {
+      throw new APIError(400, 'Payment verification failed');
+    }
   }
 
-  // Step 2 — Check not already confirmed (idempotency)
-  const existing = await Order.findOne({
-    "payment.razorpayOrderId": razorpayOrderId,
-  });
-  if (existing) throw new APIError(409, "Order already confirmed");
+  if (paymentMethod === 'online') {
+    const existing = await Order.findOne({
+      'payment.razorpayOrderId': razorpayOrderId,
+    });
+    if (existing) throw new APIError(409, 'Order already confirmed');
+  }
 
-  // Step 3 — Re-calculate prices server-side (same logic as initiate)
-  const now = new Date();
+  const now          = new Date();
   const activeOffers = await Offer.find({
-    isActive: true,
-    startsAt: { $lte: now },
+    isActive : true,
+    startsAt : { $lte: now },
     expiresAt: { $gte: now },
   });
 
   const orderItems = [];
-  let subtotal = 0;
-  let discount = 0;
+  let subtotal     = 0;
+  let discount     = 0;
 
   for (const item of items) {
-    const product = await Product.findById(item.productId).populate(
-      "category",
-      "name basePrice",
-    );
+    const product = await Product.findById(item.productId)
+      .populate('category', 'name basePrice');
 
     if (!product || !product.isAvailable || !product.isActive) {
-      throw new APIError(
-        400,
-        `Product ${item.productId} is no longer available`,
-      );
+      throw new APIError(400, `Product ${item.productId} is no longer available`);
     }
 
-    const base =
-      product.priceOverride?.[item.variant] ??
-      product.category.basePrice[item.variant];
-    const offer = activeOffers.find(
-      (o) =>
-        o.category === null ||
-        o.category?.toString() === product.category._id.toString(),
+    const base = product.priceOverride?.[item.variant]
+      ?? product.category.basePrice[item.variant];
+
+    const offer = activeOffers.find(o =>
+      !o.category ||
+      o.category.toString() === product.category._id.toString()
     );
+
     const unitPrice = offer
       ? Math.round(base * (1 - offer.discountPercent / 100))
       : base;
 
     orderItems.push({
-      product: product._id,
+      product    : product._id,
       productName: product.name,
-      variant: item.variant,
+      variant    : item.variant,
       isZeroSugar: product.isZeroSugar,
-      quantity: item.quantity,
+      quantity   : item.quantity,
       unitPrice,
-      totalPrice: unitPrice * item.quantity,
+      totalPrice : unitPrice * item.quantity,
     });
 
     subtotal += base * item.quantity;
     discount += (base - unitPrice) * item.quantity;
   }
 
-  // Step 4 — Save order
+  const deliveryCharge = 20;
+  const codCharge      = paymentMethod === 'cod' ? 10 : 0;
+  const total          = (subtotal - discount) + deliveryCharge + codCharge;
+  
+
   const order = await Order.create({
     customer: req.user._id,
-    items: orderItems,
-    status: "placed",
+    items   : orderItems,
+    status  : 'placed',
     delivery: {
-      address: deliveryAddress,
-      phone: deliveryPhone,
+      address : deliveryAddress,
+      phone   : deliveryPhone,
       location: deliveryLocation,
     },
-    pricing: { subtotal, discountAmount: discount, total: subtotal - discount },
+    pricing: {
+      subtotal,
+      discountAmount : discount,
+      deliveryCharge,             
+      codCharge,       
+      total,
+    },
     payment: {
-      razorpayOrderId,
-      razorpayPaymentId,
-      status: "paid",
-      paidAt: new Date(),
+      razorpayOrderId  : razorpayOrderId  || null,
+      razorpayPaymentId: razorpayPaymentId || null,
+      method           : paymentMethod,              
+      status           : paymentMethod === 'cod' ? 'pending' : 'paid',
+      paidAt           : paymentMethod === 'online'  ? new Date() : null,
     },
   });
 
-  // Step 5 — Notify admin via Socket + FCM
-  const populatedOrder = await Order.findById(order._id).populate(
-    "customer",
-    "name phone",
-  );
+  const populatedOrder = await Order.findById(order._id)
+    .populate('customer', 'name phone');
   emitNewOrder(populatedOrder);
 
-  const admin = await User.findOne({ role: "admin" });
-  if (admin?.fcmToken) {
+  const adminUser = await User.findOne({ role: 'admin' });
+  if (adminUser?.fcmToken) {
     await sendFCM(
-      admin.fcmToken,
-      "🍦 New Order!",
-      `Order from ${req.user.phone}`,
-      { type: "new_order", orderId: order._id.toString() },
+      adminUser.fcmToken,
+      '🍦 New Order!',
+      `${paymentMethod.toUpperCase()} order from ${req.user.phone}`,
+      { type: 'new_order', orderId: order._id.toString() }
     );
   }
 
-  // Step 6 — Notify customer
   if (req.user.fcmToken) {
     await sendFCM(
       req.user.fcmToken,
-      "Order Placed ✅",
-      "Your order is confirmed!",
-      { type: "order_update", orderId: order._id.toString(), status: "placed" },
+      'Order Placed ✅',
+      'Your order is confirmed!',
+      { type: 'order_update', orderId: order._id.toString(), status: 'placed' }
     );
   }
 
-  return res.status(201).json(new APIResponse(201, order, "Order confirmed"));
+  return res.status(201).json(new APIResponse(201, order, 'Order confirmed'));
 });
 
 //GET /api/orders/my
