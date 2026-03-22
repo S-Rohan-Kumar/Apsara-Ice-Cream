@@ -9,7 +9,6 @@ import {
 import { Router } from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
 import adminMiddleware from "../middleware/admin.middleware.js";
-import multer from "multer";
 import { upload } from "../middleware/multer.midleware.js";
 
 const router = Router();

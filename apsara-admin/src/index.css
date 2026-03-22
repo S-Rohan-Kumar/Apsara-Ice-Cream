@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  /* This defines your "Apsara Green" globally */
+  --color-apsara: #1B5E4B;
+  --color-apsara-light: #f7fbf9;
+  
+  /* Overriding default fonts if you want */
+  --font-sans: "Inter", ui-sans-serif, system-ui;
+}
+
+/* Custom base styles to fix the "White on Black" or "Purple" issue */
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-800;
+  }
+  
+  /* Resetting default link colors that look "Blue/Purple" */
+  a {
+    @apply text-apsara no-underline;
+  }
+}

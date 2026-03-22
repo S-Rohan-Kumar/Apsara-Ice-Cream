@@ -125,6 +125,40 @@ const saveAddress = asyncHandler(async (req, res) => {
   return res.status(200).json(new APIResponse(200, user, 'Address saved'));  // ✅ status not stats
 });
 
+// POST /api/auth/admin-login
+const adminLogin = asyncHandler(async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    throw new APIError(400, 'Username and password required');
+  }
+
+  if (
+    username !== process.env.ADMIN_USERNAME ||
+    password !== process.env.ADMIN_PASSWORD
+  ) {
+    throw new APIError(401, 'Invalid credentials');
+  }
+
+  const admin = await User.findOne({ role: 'admin' });
+  if (!admin) throw new APIError(404, 'Admin account not found');
+
+  const accessToken = jwt.sign(
+    { _id: admin._id, role: 'admin' },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+
+  return res.status(200).json(
+    new APIResponse(200, { accessToken, user: {
+      _id  : admin._id,
+      phone: admin.phone,
+      role : 'admin',
+    }}, 'Admin login successful')
+  );
+});
+
+
 export {
   verifyAuth,
   getCurrentUser,
@@ -132,4 +166,5 @@ export {
   saveFcmToken,
   deleteFcmToken,
   saveAddress,
+  adminLogin,
 };
