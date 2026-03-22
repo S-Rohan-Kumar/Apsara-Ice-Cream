@@ -25,8 +25,9 @@ const broadcastNotification = asyncHandler(async (req, res) => {
   }
  
   return res.status(200).json(
-    new APIResponse(200, { totalUser    s: users.length, sent, failed }, 'Broadcast sent')
+    new APIResponse(200, { totalUsers: users.length, sent, failed }, 'Broadcast sent')
   );
+
 });
  
 export { broadcastNotification };

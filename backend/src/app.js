@@ -1,11 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import products from '../data/sample.js';
 import errorHandler from './middleware/error-handler.middleware.js';
 import http from 'http';
 import { initSocket  } from './socket/socket.js';
 import helmet from 'helmet';
-
 
 
 const app = express();
@@ -30,13 +28,17 @@ import authRoute from "./routes/auth.routes.js"
 import categoryRoute from "./routes/category.routes.js"
 import productRoute from "./routes/product.routes.js"
 import offerRoute from "./routes/offers.routes.js"
+import orderRoute from "./routes/order.routes.js"
+import adminRoute from "./routes/admin.routes.js"
+
 
 //All routes 
-app.use('/api/auth' , authRoute)  
-app.use('/api/', authRoute)  
+app.use('/api', authRoute);
 app.use('/api/categories', categoryRoute)
 app.use('/api/products', productRoute)
 app.use('/api/offers', offerRoute)
+app.use('/api/orders', orderRoute);
+app.use('/api/admin',  adminRoute);
 
 
 app.use(errorHandler)
