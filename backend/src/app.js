@@ -13,7 +13,7 @@ initSocket(server);
 
 app.use(helmet())
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: "https://apsara-ice-cream-mandya.vercel.app",
     credentials: true
 }));
 app.use(express.json({limit: '16kb'}));
