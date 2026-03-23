@@ -5,6 +5,7 @@ import {
   updateProduct,
   toggleStock,
   deleteProduct,
+  getAllProducts
 } from "../controllers/product.controller.js";
 import { Router } from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
@@ -17,6 +18,9 @@ router
   .route("/")
   .get(getProducts)
   .post(authMiddleware, adminMiddleware, upload.single("image"), createProduct);
+
+router.get("/all",authMiddleware, adminMiddleware,getAllProducts);
+
 
 router
   .route("/:id")

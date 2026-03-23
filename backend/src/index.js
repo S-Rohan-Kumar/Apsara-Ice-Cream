@@ -1,20 +1,22 @@
-import dotenv  from 'dotenv';
-dotenv.config(
-    {
-        path: '../.env'
-    }
-);
-import { server } from "./app.js"
-import connectDB from "./db/index.js";
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
+dotenv.config({ path: resolve(__dirname, '../.env') });
+
+const { server }  = await import('./app.js');
+const { default: connectDB } = await import('./db/index.js');
 
 const PORT = process.env.PORT || 8000;
 
 connectDB()
-    .then(() =>{
-        server.listen(PORT, () =>{
-            console.log(`Server is running in http://localhost:${PORT}`);
-        })
-    })
-    .catch((error) =>{
-        console.log("Failed to connect to MongoDB", error);
-    })
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.log('Failed to connect to MongoDB', error);
+  });
