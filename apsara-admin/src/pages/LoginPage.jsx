@@ -21,105 +21,91 @@ export default function LoginPage() {
       dispatch(SetCredentials({ token: res.accessToken, user: res.user }));
       navigate('/orders');
     } catch (err) {
-      setError(err?.data?.message || 'Invalid username or password');
+      setError(err?.data?.message || 'Invalid credentials');
     }
   };
 
   return (
-    <div className='min-h-screen flex bg-[#F7FBF9]'>
+    <div className='min-h-screen flex bg-[#FBFCFB]'>
+      {/* Branding panel */}
+      <div className='hidden lg:flex w-[480px] shrink-0 bg-[#1B4332] flex-col justify-between p-16 relative overflow-hidden'>
+        <div className='absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl' />
+        <div className='absolute bottom-0 left-0 w-64 h-64 bg-emerald-400/5 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl' />
 
-      {/* Left branding panel */}
-      <div className='hidden lg:flex w-[460px] shrink-0 bg-gradient-to-br from-[#1B5E4B] to-[#2a7a60]
-                      flex-col justify-between p-12 relative overflow-hidden'>
-        <div className='absolute -top-20 -left-20 w-72 h-72 rounded-full bg-white/5' />
-        <div className='absolute -bottom-12 -right-12 w-56 h-56 rounded-full bg-white/5' />
-
-        <div className='relative flex items-center gap-3'>
-          <div className='w-12 h-12 bg-[#F5A623] rounded-2xl flex items-center
-                          justify-center text-2xl shadow-lg shadow-black/20'>🍦</div>
+        <div className='relative flex items-center gap-4'>
+          <div className='w-14 h-14 bg-white/5 backdrop-blur-xl rounded-[22px] flex items-center
+                          justify-center text-3xl shadow-2xl'>🍦</div>
           <div>
-            <p className='text-white/50 text-[10px] font-bold tracking-widest uppercase'>Admin Portal</p>
-            <h1 className='text-white text-xl font-extrabold leading-none'>Apsara Ice Creams</h1>
+            <p className='text-emerald-400/60 text-[10px] font-black tracking-[4px] uppercase'>Admin Portal</p>
+            <h1 className='text-white text-2xl font-black tracking-tight'>Apsara Ice Creams</h1>
           </div>
         </div>
 
-        <div className='relative space-y-8'>
-          <div>
-            <p className='text-[#F5A623] text-xs font-bold tracking-widest uppercase mb-3'>
-              Scooping Happiness Since 1971
-            </p>
-            <h2 className='text-white text-3xl font-extrabold leading-snug'>
-              Manage your store<br />from one place.
-            </h2>
-          </div>
-          <div className='space-y-3'>
+        <div className='relative'>
+          <p className='text-emerald-400 text-[11px] font-black tracking-[3px] uppercase mb-4'>Since 1971</p>
+          <h2 className='text-white text-4xl font-black leading-tight tracking-tight'>
+            Manage your store<br />
+            <span className='text-emerald-500/60 font-serif italic font-light'>with grace.</span>
+          </h2>
+          <div className='mt-12 space-y-5'>
             {[
-              ['📦','Live order tracking & updates'],
-              ['🍦','Product & category management'],
-              ['📊','Revenue reports & analytics'],
-              ['📢','Push notifications to all customers'],
-            ].map(([icon, text]) => (
-              <div key={text} className='flex items-center gap-3'>
-                <div className='w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center text-sm shrink-0'>{icon}</div>
-                <p className='text-white/75 text-sm'>{text}</p>
+              'Live Order Dashboard',
+              'Inventory Control',
+              'Growth Analytics',
+              'Customer Broadcast'
+            ].map((text) => (
+              <div key={text} className='flex items-center gap-4 group'>
+                <div className='w-2 h-2 rounded-full bg-emerald-500/20 group-hover:bg-emerald-500 transition-colors' />
+                <p className='text-white/60 text-xs font-bold tracking-wide'>{text}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <p className='relative text-white/25 text-xs'>© 2024 Apsara Ice Creams · Mandya</p>
+        <p className='relative text-white/20 text-[10px] font-bold uppercase tracking-widest'>© 2024 Apsara · Mandya</p>
       </div>
 
-      {/* Right login form */}
-      <div className='flex-1 flex items-center justify-center p-8'>
-        <div className='w-full max-w-[400px]'>
-          <div className='lg:hidden flex items-center gap-3 mb-8'>
-            <div className='w-10 h-10 bg-[#1B5E4B] rounded-xl flex items-center justify-center text-xl'>🍦</div>
-            <h1 className='font-extrabold text-[#1B5E4B] text-xl'>Apsara Admin</h1>
+      {/* Form area */}
+      <div className='flex-1 flex items-center justify-center p-12'>
+        <div className='w-full max-w-[360px] animate-in fade-in slide-in-from-right-8 duration-700'>
+          <div className='lg:hidden mb-12 flex justify-center'>
+            <div className='w-16 h-16 bg-[#1B4332] rounded-[24px] flex items-center justify-center text-3xl shadow-xl'>🍦</div>
           </div>
 
-          <h2 className='text-2xl font-extrabold text-gray-800 mb-1'>Welcome back</h2>
-          <p className='text-gray-400 text-sm mb-8'>Sign in to your admin dashboard</p>
+          <h2 className='text-3xl font-black text-slate-800 tracking-tight mb-2'>Welcome Back</h2>
+          <p className='text-slate-400 text-xs font-bold mb-10 uppercase tracking-widest'>Secure Dashboard Access</p>
 
           {error && (
-            <div className='flex items-center gap-2 bg-red-50 border border-red-100
-                            text-red-600 text-sm rounded-2xl px-4 py-3 mb-5'>
-              <span>⚠️</span><span>{error}</span>
+            <div className='bg-red-50 text-red-500 text-[11px] font-bold rounded-2xl px-5 py-4 mb-8 border border-red-100 flex items-center gap-3'>
+              <span className='text-lg'>⚠️</span> {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className='space-y-4'>
+          <form onSubmit={handleSubmit} className='space-y-6'>
             <div>
-              <label className='text-sm font-semibold text-gray-600 block mb-1.5'>Username</label>
+              <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block'>Username</label>
               <input value={username} onChange={(e) => setUsername(e.target.value)}
-                placeholder='Enter username' autoComplete='username'
-                className='w-full bg-white border border-gray-200 rounded-2xl px-4 py-3.5
-                           focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                           focus:border-[#1B5E4B] transition placeholder-gray-300' required />
+                placeholder='admin_apsara'
+                className='w-full bg-[#F2F7F2] border-none rounded-2xl px-6 py-4.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 transition-all' required />
             </div>
             <div>
-              <label className='text-sm font-semibold text-gray-600 block mb-1.5'>Password</label>
+              <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block'>Password</label>
               <div className='relative'>
                 <input type={showPass ? 'text' : 'password'}
                   value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder='Enter password' autoComplete='current-password'
-                  className='w-full bg-white border border-gray-200 rounded-2xl px-4 py-3.5 pr-12
-                             focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                             focus:border-[#1B5E4B] transition placeholder-gray-300' required />
+                  placeholder='••••••••'
+                  className='w-full bg-[#F2F7F2] border-none rounded-2xl px-6 py-4.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 transition-all' required />
                 <button type='button' onClick={() => setShowPass(!showPass)}
-                  className='absolute right-4 top-1/2 -translate-y-1/2 text-gray-300
-                             hover:text-gray-500 transition text-sm'>
+                  className='absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 transition-colors'>
                   {showPass ? '🙈' : '👁️'}
                 </button>
               </div>
             </div>
             <button type='submit' disabled={isLoading}
-              className='w-full bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold
-                         py-3.5 rounded-2xl transition-all shadow-lg shadow-[#1B5E4B]/20
-                         disabled:opacity-50 flex items-center justify-center gap-2 mt-2'>
-              {isLoading
-                ? <><span className='w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin' />Signing in...</>
-                : 'Sign In →'}
+              className='w-full bg-[#1B4332] text-white font-black py-5 rounded-[24px] 
+                         transition-all shadow-2xl shadow-emerald-900/10 hover:scale-[1.02] active:scale-[0.98]
+                         disabled:opacity-50 flex items-center justify-center gap-3 text-[11px] uppercase tracking-[3px] mt-4'>
+              {isLoading ? 'Processing...' : 'Access Dashboard'}
             </button>
           </form>
         </div>

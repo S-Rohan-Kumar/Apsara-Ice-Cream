@@ -1,5 +1,5 @@
-export const BASE_URL        = import.meta.env.VITE_API_URL;
-export const SOCKET_URL      = import.meta.env.VITE_SOCKET_URL;
+export const BASE_URL        = "https://apsara-ice-cream.onrender.com/api";
+export const SOCKET_URL      = "https://apsara-ice-cream.onrender.com";
  
 export const CATEGORIES_URL  = '/categories';
 export const PRODUCTS_URL    = '/products';

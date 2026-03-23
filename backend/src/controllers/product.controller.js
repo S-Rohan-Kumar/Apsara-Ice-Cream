@@ -44,7 +44,7 @@ const getProducts = asyncHandler(async (req, res) => {
     .populate("category", "name basePrice")
     .sort({ sortOrder: 1 });
 
-  const now = new Date(); // ✅ fixed
+  const now = new Date(); 
   const activeOffers = await Offer.find({
     isActive: true,
     startsAt: { $lte: now },
@@ -62,10 +62,14 @@ const getProducts = asyncHandler(async (req, res) => {
 
 //GET /api/products/all
 const getAllProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find({}).populate("category", "name basePrice")
+  const { category, zeroSugar } = req.query;
+  const filter ={}
+  if (category) filter.category = category;
+  if (zeroSugar) filter.isZeroSugar = zeroSugar === "true";
+  const products = await Product.find(filter).populate("category", "name basePrice")
     .sort({ sortOrder: 1 });
 
-  const now = new Date(); // ✅ fixed
+  const now = new Date(); 
   const activeOffers = await Offer.find({
     isActive: true,
     startsAt: { $lte: now },

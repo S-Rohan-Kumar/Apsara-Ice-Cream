@@ -30,53 +30,49 @@ export default function CategoriesPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (editing) { await updateCategory({ id:editing._id, ...form }).unwrap(); showSuccess('Category updated'); }
-      else         { await createCategory(form).unwrap(); showSuccess('Category created'); }
+      if (editing) { await updateCategory({ id:editing._id, ...form }).unwrap(); showSuccess('Collection Updated'); }
+      else         { await createCategory(form).unwrap(); showSuccess('New Collection Created'); }
       setShowModal(false);
-    } catch (e) { showError(e?.data?.message || 'Save failed'); }
+    } catch (e) { showError(e?.data?.message || 'Action failed'); }
   };
 
   return (
-    <div>
-      <div className='flex items-center justify-between mb-6'>
+    <div className='pb-20'>
+      <div className='flex items-center justify-between mb-10'>
         <div>
-          <h1 className='text-2xl font-extrabold text-gray-800'>Categories</h1>
-          <p className='text-sm text-gray-400 mt-0.5'>{categories.length} categories</p>
+          <h1 className='text-2xl font-black text-[#1B4332]'>Categories</h1>
+          <p className='text-[11px] font-bold text-emerald-900/40 uppercase tracking-widest mt-1'>
+            {categories.length} Flavor Collections
+          </p>
         </div>
         <button onClick={() => { setEditing(null); setForm(EMPTY); setShowModal(true); }}
-          className='bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold px-5 py-2.5
-                     rounded-xl shadow-md shadow-[#1B5E4B]/20 transition-all text-sm'>
-          + Add Category
+          className='bg-[#1B4332] text-white font-black px-6 py-3.5
+                     rounded-2xl shadow-xl shadow-emerald-900/10 transition-all text-[11px] uppercase tracking-widest'>
+          + Add Collection
         </button>
       </div>
 
       {isLoading ? <Spinner /> : (
-        <div className='grid sm:grid-cols-2 xl:grid-cols-3 gap-4'>
+        <div className='grid sm:grid-cols-2 lg:grid-cols-3 gap-6'>
           {categories.map((c) => (
-            <div key={c._id}
-              className='bg-white rounded-2xl border border-gray-100 shadow-sm
-                         hover:shadow-md hover:border-[#1B5E4B]/20 transition-all overflow-hidden'>
-              {/* image / placeholder */}
-              <div className='h-28 bg-gradient-to-br from-[#1B5E4B]/5 to-[#F5A623]/10
-                              flex items-center justify-center overflow-hidden relative'>
+            <div key={c._id} className='bg-white rounded-[32px] border border-green-50 shadow-sm overflow-hidden group hover:shadow-xl transition-all duration-500'>
+              <div className='h-32 bg-[#F2F7F2] relative overflow-hidden'>
                 {c.imageUrl
-                  ? <img src={c.imageUrl} className='w-full h-full object-cover' />
-                  : <span className='text-5xl'>🍦</span>}
+                  ? <img src={c.imageUrl} className='w-full h-full object-cover group-hover:scale-110 transition-transform duration-700' />
+                  : <div className='w-full h-full flex items-center justify-center text-4xl grayscale opacity-20'>🍦</div>}
                 <button onClick={() => openEdit(c)}
-                  className='absolute top-2 right-2 bg-white/90 hover:bg-white text-[#1B5E4B]
-                             text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm transition'>
-                  Edit
+                  className='absolute top-4 right-4 bg-white/90 backdrop-blur text-[#1B4332]
+                             text-[9px] font-black px-4 py-2 rounded-xl shadow-sm uppercase tracking-widest'>
+                  Modify
                 </button>
               </div>
-              <div className='p-4'>
-                <h3 className='font-extrabold text-gray-800 mb-3'>{c.name}</h3>
-                <div className='grid grid-cols-4 gap-1.5'>
+              <div className='p-6'>
+                <h3 className='font-black text-slate-800 text-[15px] mb-4'>{c.name}</h3>
+                <div className='grid grid-cols-4 gap-2'>
                   {VARIANTS.map((v) => (
-                    <div key={v.key} className='text-center bg-[#F7FBF9] rounded-xl py-2
-                                                border border-[#1B5E4B]/10'>
-                      <p className='text-[9px] font-bold text-[#1B5E4B]/60 uppercase'>{v.label}</p>
-                      <p className='text-sm font-extrabold text-[#1B5E4B]'>₹{c.basePrice[v.key]}</p>
-                      <p className='text-[9px] text-gray-300'>{v.ml}</p>
+                    <div key={v.key} className='text-center bg-[#F2F7F2] rounded-2xl py-2.5 px-1'>
+                      <p className='text-[8px] font-black text-emerald-500 uppercase tracking-tighter mb-0.5'>{v.label}</p>
+                      <p className='text-[11px] font-black text-[#1B4332]'>₹{c.basePrice[v.key]}</p>
                     </div>
                   ))}
                 </div>
@@ -88,64 +84,47 @@ export default function CategoriesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className='fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center
-                        justify-center z-50 p-4'>
-          <div className='bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden'>
-            <div className='bg-[#1B5E4B] px-6 py-5'>
-              <h2 className='text-lg font-extrabold text-white'>
-                {editing ? '✏️ Edit Category' : '🍦 New Category'}
+        <div className='fixed inset-0 bg-[#1B4332]/20 backdrop-blur-xl flex items-center justify-center z-50 p-4'>
+          <div className='bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-300'>
+            <div className='bg-[#1B4332] px-8 py-10 text-center relative'>
+              <h2 className='text-2xl font-black text-white italic font-serif'>
+                {editing ? 'Edit Collection' : 'New Collection'}
               </h2>
+              <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-white/30 hover:text-white font-black">✕</button>
             </div>
-            <form onSubmit={handleSubmit} className='p-6 space-y-4'>
+            <form onSubmit={handleSubmit} className='p-8 space-y-6'>
               <div>
-                <label className='text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5'>
-                  Name
-                </label>
+                <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block'>Name</label>
                 <input placeholder='e.g. Fruitylicious' value={form.name}
                   onChange={(e) => setForm({...form, name:e.target.value})}
-                  className='w-full border border-gray-200 rounded-xl px-4 py-3
-                             focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                             focus:border-[#1B5E4B] bg-gray-50' required />
+                  className='w-full bg-[#F2F7F2] border-none rounded-2xl px-5 py-3.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500' required />
               </div>
               <div>
-                <label className='text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5'>
-                  Image URL (Cloudinary)
-                </label>
-                <input placeholder='https://res.cloudinary.com/...' value={form.imageUrl}
+                <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5 block'>Image Link</label>
+                <input placeholder='https://...' value={form.imageUrl}
                   onChange={(e) => setForm({...form, imageUrl:e.target.value})}
-                  className='w-full border border-gray-200 rounded-xl px-4 py-3
-                             focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                             focus:border-[#1B5E4B] bg-gray-50' />
+                  className='w-full bg-[#F2F7F2] border-none rounded-2xl px-5 py-3.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500' />
               </div>
               <div>
-                <label className='text-xs font-bold text-gray-500 uppercase tracking-wide block mb-2'>
-                  Base Prices (₹)
-                </label>
-                <div className='grid grid-cols-2 gap-3'>
+                <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-3 block'>Base Pricing (₹)</label>
+                <div className='grid grid-cols-2 gap-4'>
                   {VARIANTS.map((v) => (
-                    <div key={v.key}>
-                      <label className='text-xs text-gray-400 block mb-1'>
-                        {v.label} <span className='text-gray-300'>({v.ml})</span>
+                    <div key={v.key} className="bg-[#F2F7F2] p-3 rounded-2xl">
+                      <label className='text-[9px] font-black text-emerald-600 block mb-1 uppercase'>
+                        {v.label} <span className='text-emerald-300'>({v.ml})</span>
                       </label>
                       <input type='number' placeholder='0' value={form.basePrice[v.key]}
                         onChange={(e) => setForm({...form, basePrice:{...form.basePrice, [v.key]:e.target.value}})}
-                        className='w-full border border-gray-200 rounded-xl px-3 py-2.5
-                                   focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                                   focus:border-[#1B5E4B] bg-gray-50' required />
+                        className='w-full bg-transparent border-none p-0 text-sm font-black text-slate-700 focus:ring-0' required />
                     </div>
                   ))}
                 </div>
               </div>
-              <div className='flex gap-3 pt-1'>
-                <button type='button' onClick={() => setShowModal(false)}
-                  className='flex-1 border border-gray-200 py-3 rounded-xl font-semibold
-                             text-gray-500 hover:bg-gray-50 transition text-sm'>Cancel</button>
-                <button type='submit'
-                  className='flex-1 bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold
-                             py-3 rounded-xl transition shadow-md shadow-[#1B5E4B]/20 text-sm'>
-                  Save
-                </button>
-              </div>
+              <button type='submit'
+                className='w-full bg-[#1B4332] text-white font-black py-4.5 rounded-[20px] 
+                           transition-all shadow-xl shadow-emerald-900/10 text-[11px] uppercase tracking-[3px] mt-4'>
+                Confirm
+              </button>
             </form>
           </div>
         </div>

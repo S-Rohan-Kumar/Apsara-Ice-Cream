@@ -8,7 +8,7 @@ export const productApiSlice = apiSlice.injectEndpoints({
     // GET /api/products?category=:id
     getProducts: builder.query({
       query: (categoryId) => ({
-        url   : PRODUCTS_URL,
+        url   : `${PRODUCTS_URL}/all`,
         params: categoryId ? { category: categoryId } : {},
       }),
       transformResponse: (res) => res.data,

@@ -1,194 +1,136 @@
 import { useState } from 'react';
 import { useGetMonthlyReportQuery } from '../slices/orderApiSlice';
 import Spinner from '../components/common/Spinner';
- 
+
 const currency = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
- 
-const exportCSV = (orders) => {
-  const headers = ['Order ID','Customer','Phone','Items','Total','Date'];
-  const rows = orders.map((o) => [
-    o._id.slice(-6).toUpperCase(),
-    o.customer?.name || '',
-    o.customer?.phone || '',
-    o.items.map(i => `${i.productName} x${i.quantity}`).join(' | '),
-    o.pricing.total,
-    new Date(o.createdAt).toLocaleDateString('en-IN'),
-  ]);
-  const csv  = [headers, ...rows].map(r => r.join(',')).join('\n');
-  const blob = new Blob([csv], { type:'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href:url, download:'apsara-report.csv' });
-  a.click(); URL.revokeObjectURL(url);
-};
- 
-export function ReportsPage() {
-  const now   = new Date();
+
+export default function ReportsPage() {
+  const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
   const today = now.toISOString().slice(0,10);
- 
+
   const [from,      setFrom]      = useState(first);
   const [to,        setTo]        = useState(today);
   const [submitted, setSubmitted] = useState(false);
- 
-  const { data:report, isLoading, isFetching } =
-    useGetMonthlyReportQuery({ from, to }, { skip:!submitted });
- 
+
+  const { data:report, isLoading, isFetching } = useGetMonthlyReportQuery({ from, to }, { skip:!submitted });
+
   const SUMMARY = report ? [
-    { label:'Total Orders',   value:report.totalOrders,                icon:'📦', cls:'text-gray-800' },
-    { label:'Total Revenue',  value:currency(report.totalRevenue),     icon:'💰', cls:'text-[#1B5E4B]' },
-    { label:'Avg Order',      value:currency(report.avgOrderValue),    icon:'📊', cls:'text-[#F5A623]' },
+    { label:'Orders',  value:report.totalOrders,            icon:'📦' },
+    { label:'Revenue', value:currency(report.totalRevenue), icon:'💰' },
+    { label:'Average', value:currency(report.avgOrderValue), icon:'📊' },
   ] : [];
- 
+
   return (
-    <div>
-      <div className='mb-6'>
-        <h1 className='text-2xl font-extrabold text-gray-800'>Reports</h1>
-        <p className='text-sm text-gray-400 mt-0.5'>Revenue & order analytics</p>
+    <div className='max-w-7xl mx-auto pb-20'>
+      <div className='mb-10'>
+        <h1 className='text-2xl font-black text-[#1B4332]'>Analytics</h1>
+        <p className='text-[11px] font-bold text-emerald-900/40 uppercase tracking-widest mt-1'>Revenue Performance & Insight</p>
       </div>
- 
-      {/* Date picker */}
-      <div className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5'>
-        <p className='text-xs font-extrabold text-gray-400 uppercase tracking-wider mb-4'>
-          Select Date Range
-        </p>
-        <div className='flex flex-wrap items-end gap-3'>
-          {[['From', from, setFrom], ['To', to, setTo]].map(([label, val, set]) => (
-            <div key={label}>
-              <label className='text-xs font-semibold text-gray-400 block mb-1'>{label}</label>
+
+      <div className='bg-white rounded-[40px] border border-green-50 shadow-sm p-8 mb-10'>
+        <div className='flex flex-wrap items-end gap-6'>
+          {[ ['From', from, setFrom], ['To', to, setTo] ].map(([label, val, set]) => (
+            <div key={label} className='flex-1 min-w-[150px]'>
+              <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block'>{label} Date</label>
               <input type='date' value={val} onChange={(e) => set(e.target.value)}
-                className='border border-gray-200 rounded-xl px-4 py-2.5 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                           focus:border-[#1B5E4B] bg-gray-50' />
+                className='w-full bg-[#F2F7F2] border-none rounded-2xl px-5 py-3.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500' />
             </div>
           ))}
           <button onClick={() => setSubmitted(true)}
-            className='bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold px-6 py-2.5
-                       rounded-xl shadow-md shadow-[#1B5E4B]/20 transition-all text-sm'>
-            Generate
+            className='bg-[#1B4332] text-white font-black px-10 py-4
+                       rounded-2xl shadow-xl shadow-emerald-900/10 transition-all text-[11px] uppercase tracking-widest'>
+            Fetch Data
           </button>
         </div>
       </div>
- 
-      {(isLoading || isFetching) && <Spinner />}
- 
+
+      {(isLoading || isFetching) && <div className='py-20'><Spinner /></div>}
+
       {report && (
-        <>
-          {/* Summary */}
-          <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5'>
+        <div className='animate-in fade-in duration-700'>
+          {/* Summary Metrics */}
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mb-10'>
             {SUMMARY.map((s) => (
-              <div key={s.label}
-                className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5
-                           flex items-center gap-4'>
-                <div className='w-12 h-12 bg-[#F7FBF9] rounded-xl flex items-center
-                                justify-center text-2xl border border-[#1B5E4B]/10'>
+              <div key={s.label} className='bg-white rounded-[32px] border border-green-50 shadow-sm p-6 flex items-center gap-6'>
+                <div className='w-14 h-14 bg-[#F2F7F2] rounded-[22px] flex items-center justify-center text-2xl group'>
                   {s.icon}
                 </div>
                 <div>
-                  <p className={`text-2xl font-extrabold ${s.cls}`}>{s.value}</p>
-                  <p className='text-xs text-gray-400 font-semibold mt-0.5'>{s.label}</p>
+                  <p className='text-2xl font-black text-[#1B4332]'>{s.value}</p>
+                  <p className='text-[10px] text-slate-400 font-black uppercase tracking-widest'>{s.label}</p>
                 </div>
               </div>
             ))}
           </div>
- 
-          {/* Top products */}
-          <div className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5'>
-            <p className='text-xs font-extrabold text-gray-400 uppercase tracking-wider mb-4'>
-              🏆 Top Products
-            </p>
-            <div className='space-y-3'>
-              {report.topProducts.map((p, i) => {
-                const pct = Math.round((p.totalSold / (report.topProducts[0]?.totalSold||1)) * 100);
-                return (
-                  <div key={p.productName} className='flex items-center gap-3'>
-                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center
-                                      text-xs font-extrabold shrink-0
-                      ${i===0 ? 'bg-yellow-100 text-yellow-600'
-                        : i===1 ? 'bg-gray-100 text-gray-500'
-                        : 'bg-[#F7FBF9] text-[#1B5E4B]'}`}>{i+1}</span>
+
+          <div className='grid lg:grid-cols-3 gap-8'>
+            {/* Top Products - List Layout */}
+            <div className='bg-white rounded-[40px] border border-green-50 shadow-sm p-8'>
+              <h2 className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-8'>Top Sellers</h2>
+              <div className='space-y-6'>
+                {report.topProducts.map((p, i) => (
+                  <div key={p.productName} className='flex items-center gap-4'>
+                    <span className='text-[11px] font-black text-[#1B4332] bg-[#F2F7F2] w-8 h-8 flex items-center justify-center rounded-xl shrink-0'>
+                      {i+1}
+                    </span>
                     <div className='flex-1 min-w-0'>
-                      <div className='flex justify-between text-sm mb-1'>
-                        <span className='font-semibold text-gray-700 truncate'>{p.productName}</span>
-                        <span className='font-bold text-gray-500 shrink-0 ml-2'>{currency(p.revenue)}</span>
+                      <div className='flex justify-between mb-1'>
+                        <span className='font-black text-slate-700 text-xs truncate mr-2'>{p.productName}</span>
+                        <span className='font-black text-slate-400 text-xs'>{currency(p.revenue)}</span>
                       </div>
-                      <div className='h-1.5 bg-gray-100 rounded-full overflow-hidden'>
-                        <div className='h-full bg-[#1B5E4B] rounded-full transition-all'
-                             style={{ width:`${pct}%` }} />
+                      <div className='h-1.5 bg-[#F2F7F2] rounded-full overflow-hidden'>
+                        <div className='h-full bg-emerald-500 rounded-full' 
+                             style={{ width:`${Math.round((p.totalSold / report.topProducts[0].totalSold) * 100)}%` }} />
                       </div>
-                      <p className='text-[10px] text-gray-300 mt-1'>{p.totalSold} units</p>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
- 
-          {/* Orders table */}
-          <div className='bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden'>
-            <div className='flex items-center justify-between px-5 py-4 border-b border-gray-50'>
-              <p className='font-bold text-gray-700 text-sm'>
-                Orders <span className='text-gray-300 font-normal'>({report.orders.length})</span>
-              </p>
-              <button onClick={() => exportCSV(report.orders)}
-                className='flex items-center gap-1.5 text-[#1B5E4B] text-xs font-bold
-                           border border-[#1B5E4B]/25 bg-[#1B5E4B]/5 hover:bg-[#1B5E4B]/10
-                           px-3 py-1.5 rounded-lg transition'>
-                📥 Export CSV
-              </button>
-            </div>
-            <div className='overflow-x-auto'>
-              <table className='w-full'>
-                <thead>
-                  <tr className='border-b border-gray-50'>
-                    {['#','Customer','Items','Total','Date'].map(h => (
-                      <th key={h} className='text-left px-5 py-3 text-xs font-extrabold
-                                             text-gray-400 uppercase tracking-wider'>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.orders.map((o) => (
-                    <tr key={o._id} className='border-b border-gray-50 hover:bg-[#F7FBF9] transition'>
-                      <td className='px-5 py-3.5'>
-                        <span className='font-mono font-bold text-[#1B5E4B] text-xs
-                                         bg-[#1B5E4B]/10 px-2 py-1 rounded-lg'>
-                          #{o._id.slice(-6).toUpperCase()}
-                        </span>
-                      </td>
-                      <td className='px-5 py-3.5'>
-                        <p className='font-semibold text-gray-700 text-sm'>{o.customer?.name||'—'}</p>
-                        <p className='text-xs text-gray-400'>{o.customer?.phone}</p>
-                      </td>
-                      <td className='px-5 py-3.5 text-xs text-gray-400 max-w-xs'>
-                        <p className='truncate'>
-                          {o.items.map(i => `${i.productName} ×${i.quantity}`).join(' · ')}
-                        </p>
-                      </td>
-                      <td className='px-5 py-3.5 font-bold text-gray-800 text-sm'>
-                        {currency(o.pricing.total)}
-                      </td>
-                      <td className='px-5 py-3.5 text-xs text-gray-400'>
-                        {new Date(o.createdAt).toLocaleDateString('en-IN', {
-                          day:'2-digit', month:'short', year:'numeric'
-                        })}
-                      </td>
+
+            {/* List Layout for Orders */}
+            <div className='lg:col-span-2 bg-white rounded-[40px] border border-green-50 shadow-sm overflow-hidden'>
+              <div className='px-8 py-6 border-b border-slate-50 flex justify-between items-center'>
+                <h2 className='text-[10px] font-black text-[#1B4332] uppercase tracking-widest'>Order Ledger</h2>
+                <span className='text-[10px] font-black text-slate-300 uppercase'>{report.orders.length} Deliveries</span>
+              </div>
+              <div className='overflow-x-auto'>
+                <table className='w-full'>
+                  <thead className='bg-[#F2F7F2]/30'>
+                    <tr>
+                      {['ID','Customer','Revenue','Date'].map(h => (
+                        <th key={h} className='text-left px-8 py-4 text-[9px] font-black text-emerald-900/40 uppercase tracking-widest'>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className='divide-y divide-slate-50'>
+                    {report.orders.map((o) => (
+                      <tr key={o._id} className='hover:bg-[#F2F7F2]/50 transition-colors'>
+                        <td className='px-8 py-5'>
+                          <span className='font-mono font-black text-[#1B4332] text-[11px]'>#{o._id.slice(-6).toUpperCase()}</span>
+                        </td>
+                        <td className='px-8 py-5'>
+                          <p className='font-black text-slate-700 text-xs'>{o.customer?.name || 'Guest'}</p>
+                          <p className='text-[9px] font-bold text-slate-300'>{o.customer?.phone}</p>
+                        </td>
+                        <td className='px-8 py-5'>
+                          <span className='font-black text-slate-800 text-xs'>{currency(o.pricing.total)}</span>
+                        </td>
+                        <td className='px-8 py-5'>
+                          <span className='text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap'>
+                            {new Date(o.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </>
-      )}
- 
-      {submitted && !isLoading && !report && (
-        <div className='text-center py-20 text-gray-300'>
-          <span className='text-5xl block mb-3'>📊</span>
-          <p className='text-gray-400'>No delivered orders in this range</p>
         </div>
       )}
     </div>
   );
 }
- 
-export default ReportsPage;

@@ -12,7 +12,7 @@ const shortId  = (id) => id?.slice(-6).toUpperCase();
 
 const STEPS = ['placed','preparing','out_for_delivery','delivered'];
 const STEP_ICONS = { placed:'📋', preparing:'👨‍🍳', out_for_delivery:'🛵', delivered:'✅' };
-const BTN_LABELS = { preparing:'Mark Preparing', out_for_delivery:'Out for Delivery', delivered:'Mark Delivered', cancelled:'Cancel Order' };
+const BTN_LABELS = { preparing:'Confirm Order', out_for_delivery:'Dispatch Now', delivered:'Complete Order', cancelled:'Cancel Request' };
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -25,59 +25,54 @@ export default function OrderDetailPage() {
   const handleUpdate = async (status) => {
     try {
       await updateStatus({ id, status }).unwrap();
-      showSuccess(`Marked as ${STATUS_LABELS[status]}`);
+      showSuccess(`Status: ${STATUS_LABELS[status]}`);
     } catch (e) { showError(e?.data?.message || 'Update failed'); }
   };
 
   if (isLoading) return <Spinner />;
-  if (!order)    return <p className='text-center text-gray-400 py-20'>Order not found</p>;
+  if (!order) return <p className='text-center py-20 text-slate-400 font-bold'>Order Not Found</p>;
 
   const nextStatuses = STATUS_TRANSITIONS[order.status] || [];
   const currentStep  = STEPS.indexOf(order.status);
 
   return (
-    <div className='max-w-5xl mx-auto'>
-      {/* Back */}
+    <div className='max-w-6xl mx-auto pb-20'>
       <button onClick={() => navigate('/orders')}
-        className='flex items-center gap-2 text-[#1B5E4B] text-sm font-semibold mb-5
-                   hover:gap-3 transition-all'>
-        ← Back to Orders
+        className='flex items-center gap-2 text-[#1B4332] text-[10px] font-black uppercase tracking-widest mb-8 hover:gap-3 transition-all'>
+        ← Return to Queue
       </button>
 
-      {/* Title row */}
-      <div className='flex items-center gap-3 mb-5'>
-        <div className='bg-[#1B5E4B] text-white font-mono font-extrabold px-4 py-2
-                        rounded-xl text-sm tracking-wider'>
-          #{shortId(order._id)}
+      <div className='flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10'>
+        <div className='flex items-center gap-4'>
+          <div className='bg-[#1B4332] text-white font-mono font-black px-5 py-2.5 rounded-2xl text-[12px] tracking-widest'>
+            #{shortId(order._id)}
+          </div>
+          <StatusBadge status={order.status} />
         </div>
-        <StatusBadge status={order.status} />
-        <span className='text-gray-300 text-sm ml-auto'>
-          {new Date(order.createdAt).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}
-        </span>
+        <p className='text-slate-400 text-[10px] font-black uppercase tracking-widest'>
+          Received: {new Date(order.createdAt).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}
+        </p>
       </div>
 
-      {/* Stepper */}
+      {/* Modern Stepper */}
       {order.status !== 'cancelled' && (
-        <div className='bg-white rounded-2xl border border-gray-100 p-5 mb-5 shadow-sm'>
-          <div className='flex items-center'>
+        <div className='bg-white rounded-[40px] border border-green-50 p-8 mb-8 shadow-sm'>
+          <div className='flex items-center max-w-4xl mx-auto'>
             {STEPS.map((step, i) => (
               <div key={step} className='flex items-center flex-1 last:flex-none'>
-                <div className='flex flex-col items-center gap-1.5'>
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center
-                                   text-lg border-2 transition-all
-                    ${i <= currentStep
-                      ? 'bg-[#1B5E4B] border-[#1B5E4B] text-white shadow-md shadow-[#1B5E4B]/20'
-                      : 'bg-white border-gray-200 text-gray-300'}`}>
+                <div className='flex flex-col items-center gap-3'>
+                  <div className={`w-12 h-12 rounded-[20px] flex items-center justify-center text-xl transition-all duration-500
+                    ${i <= currentStep ? 'bg-[#1B4332] text-white shadow-xl shadow-emerald-900/10' : 'bg-[#F2F7F2] text-emerald-200'}`}>
                     {STEP_ICONS[step]}
                   </div>
-                  <p className={`text-[10px] font-semibold text-center whitespace-nowrap
-                    ${i <= currentStep ? 'text-[#1B5E4B]' : 'text-gray-300'}`}>
+                  <p className={`text-[9px] font-black uppercase tracking-widest text-center whitespace-nowrap transition-colors
+                    ${i <= currentStep ? 'text-[#1B4332]' : 'text-slate-300'}`}>
                     {STATUS_LABELS[step]}
                   </p>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-2 rounded-full
-                    ${i < currentStep ? 'bg-[#1B5E4B]' : 'bg-gray-100'}`} />
+                  <div className={`flex-1 h-1.5 mx-4 rounded-full transition-all duration-1000
+                    ${i < currentStep ? 'bg-emerald-500' : 'bg-[#F2F7F2]'}`} />
                 )}
               </div>
             ))}
@@ -85,122 +80,87 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      <div className='grid lg:grid-cols-2 gap-5'>
-        {/* Left col */}
-        <div className='space-y-4'>
-
-          {/* Items */}
-          <div className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5'>
-            <h2 className='text-sm font-extrabold text-gray-500 uppercase tracking-wider mb-4'>
-              🛒 Order Items
-            </h2>
-            <div className='space-y-3'>
+      <div className='grid lg:grid-cols-3 gap-8'>
+        <div className='lg:col-span-2 space-y-8'>
+          {/* List layout for items */}
+          <div className='bg-white rounded-[40px] border border-green-50 shadow-sm overflow-hidden'>
+            <div className='px-8 py-6 border-b border-slate-50'>
+              <h2 className='text-[11px] font-black text-[#1B4332] uppercase tracking-[3px]'>Detailed Items</h2>
+            </div>
+            <div className='divide-y divide-slate-50'>
               {order.items.map((item, i) => (
-                <div key={i} className='flex items-start justify-between gap-3 pb-3
-                                        border-b border-dashed border-gray-100 last:border-0 last:pb-0'>
-                  <div>
-                    <p className='font-semibold text-gray-800 text-sm'>{item.productName}</p>
-                    <p className='text-xs text-gray-400 capitalize mt-0.5'>
-                      {item.variant} {item.isZeroSugar && '· Zero Sugar'} · qty {item.quantity}
+                <div key={i} className='px-8 py-5 flex items-center justify-between gap-6 hover:bg-[#F2F7F2]/30 transition-colors'>
+                  <div className='flex-1'>
+                    <p className='font-black text-slate-800 text-sm mb-0.5'>{item.productName}</p>
+                    <p className='text-[10px] font-bold text-slate-400 uppercase tracking-tight'>
+                      {item.variant} {item.isZeroSugar && '· Zero Sugar'} · Qty: {item.quantity}
                     </p>
                   </div>
-                  <p className='font-bold text-gray-700 shrink-0'>{currency(item.totalPrice)}</p>
+                  <p className='font-black text-slate-700 text-sm'>{currency(item.totalPrice)}</p>
                 </div>
               ))}
             </div>
-
-            {/* Pricing */}
-            <div className='mt-4 pt-4 border-t border-gray-100 space-y-2'>
-              {[
-                { label:'Subtotal',  value: currency(order.pricing.subtotal), cls:'text-gray-500' },
-                order.pricing.discountAmount > 0 && { label:'🏷 Discount', value:`-${currency(order.pricing.discountAmount)}`, cls:'text-green-600 font-semibold' },
-                { label:'🛵 Delivery', value: currency(order.pricing.deliveryCharge), cls:'text-gray-500' },
-                order.pricing.codCharge > 0 && { label:'💵 COD Charge', value: currency(order.pricing.codCharge), cls:'text-gray-500' },
-              ].filter(Boolean).map((row) => (
-                <div key={row.label} className={`flex justify-between text-sm ${row.cls}`}>
-                  <span>{row.label}</span><span>{row.value}</span>
+            
+            <div className='p-8 bg-[#F2F7F2]/40'>
+              <div className='max-w-xs ml-auto space-y-3'>
+                <div className='flex justify-between text-[11px] font-bold text-slate-400 uppercase'>
+                  <span>Subtotal</span><span>{currency(order.pricing.subtotal)}</span>
                 </div>
-              ))}
-              <div className='flex justify-between font-extrabold text-base pt-2
-                              border-t border-gray-100'>
-                <span className='text-gray-800'>Total</span>
-                <span className='text-[#1B5E4B]'>{currency(order.pricing.total)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Customer */}
-          <div className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5'>
-            <h2 className='text-sm font-extrabold text-gray-500 uppercase tracking-wider mb-4'>
-              👤 Customer
-            </h2>
-            <div className='space-y-3 text-sm'>
-              {[
-                ['Name',    order.customer?.name || '—'],
-                ['Phone',   order.customer?.phone],
-                ['Address', order.delivery?.address],
-              ].map(([label, val]) => (
-                <div key={label} className='flex gap-3'>
-                  <span className='text-gray-400 w-16 shrink-0'>{label}</span>
-                  <span className='font-medium text-gray-700'>{val}</span>
+                {order.pricing.discountAmount > 0 && (
+                  <div className='flex justify-between text-[11px] font-black text-emerald-600 uppercase'>
+                    <span>🏷 Discount</span><span>-{currency(order.pricing.discountAmount)}</span>
+                  </div>
+                )}
+                <div className='flex justify-between text-[11px] font-bold text-slate-400 uppercase'>
+                  <span>🛵 Logistics</span><span>{currency(order.pricing.deliveryCharge)}</span>
                 </div>
-              ))}
-              <div className='flex gap-3'>
-                <span className='text-gray-400 w-16 shrink-0'>Payment</span>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full
-                  ${order.payment?.method === 'cod'
-                    ? 'bg-yellow-100 text-yellow-700'
-                    : 'bg-green-100 text-green-700'}`}>
-                  {order.payment?.method === 'cod' ? '💵 Cash on Delivery' : '💳 Online Paid'}
-                </span>
+                <div className='flex justify-between items-center pt-4 border-t border-emerald-100'>
+                  <span className='text-[11px] font-black text-[#1B4332] uppercase tracking-widest'>Total Amount</span>
+                  <span className='text-2xl font-black text-[#1B4332]'>{currency(order.pricing.total)}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right col */}
-        <div className='space-y-4'>
-          {/* Map */}
-          {order.delivery?.location?.lat && (
-            <div className='bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden'>
-              <MapContainer
-                center={[order.delivery.location.lat, order.delivery.location.lng]}
-                zoom={15} style={{ height: 220 }}>
-                <TileLayer url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' />
-                <Marker position={[order.delivery.location.lat, order.delivery.location.lng]} />
-              </MapContainer>
-              <button
-                onClick={() => window.open(`https://maps.google.com/?daddr=${order.delivery.location.lat},${order.delivery.location.lng}`, '_blank')}
-                className='w-full py-3 text-[#1B5E4B] font-semibold text-sm
-                           hover:bg-[#F7FBF9] transition flex items-center justify-center gap-2
-                           border-t border-gray-100'>
-                🗺 Open in Google Maps
-              </button>
+        <div className='space-y-8'>
+          {/* Customer & Delivery */}
+          <div className='bg-white rounded-[40px] border border-green-50 shadow-sm p-8'>
+            <h2 className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-6'>Logistics Details</h2>
+            <div className='space-y-6'>
+              {[
+                { label: 'Recipient', val: order.customer?.name || 'Guest' },
+                { label: 'Contact', val: order.customer?.phone },
+                { label: 'Destination', val: order.delivery?.address }
+              ].map(row => (
+                <div key={row.label}>
+                  <p className='text-[9px] font-black text-slate-300 uppercase tracking-tighter mb-1'>{row.label}</p>
+                  <p className='text-xs font-bold text-slate-700 leading-relaxed'>{row.val}</p>
+                </div>
+              ))}
+              <div className={`inline-block px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest
+                ${order.payment?.method === 'cod' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                {order.payment?.method === 'cod' ? '💵 Cash on Delivery' : '💳 Online Paid'}
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Actions */}
-          <div className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5'>
-            <h2 className='text-sm font-extrabold text-gray-500 uppercase tracking-wider mb-4'>
-              ⚡ Update Status
-            </h2>
+          <div className='bg-white rounded-[40px] border border-green-50 shadow-sm p-8'>
+            <h2 className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-6'>Update Progress</h2>
             {nextStatuses.length === 0 ? (
-              <div className='text-center py-6'>
-                <span className='text-4xl block mb-2'>{order.status === 'delivered' ? '🎉' : '❌'}</span>
-                <p className='text-gray-400 text-sm'>Order is {STATUS_LABELS[order.status]}</p>
+              <div className='text-center py-4'>
+                <p className='text-xs font-black text-slate-300 uppercase italic'>Final State Reached</p>
               </div>
             ) : (
-              <div className='space-y-2'>
+              <div className='space-y-3'>
                 {nextStatuses.map((s) => (
                   <button key={s} onClick={() => handleUpdate(s)} disabled={updating}
-                    className={`w-full py-3 px-4 rounded-xl font-bold text-sm transition-all
-                                disabled:opacity-50 flex items-center justify-center gap-2
+                    className={`w-full py-4.5 rounded-[22px] font-black text-[11px] uppercase tracking-widest transition-all
                       ${s === 'cancelled'
-                        ? 'bg-red-50 text-red-500 border border-red-200 hover:bg-red-100'
-                        : 'bg-[#1B5E4B] text-white hover:bg-[#164e3e] shadow-md shadow-[#1B5E4B]/20'}`}>
-                    {updating
-                      ? <><span className='w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin' />Updating...</>
-                      : <>{STEP_ICONS[s]} {BTN_LABELS[s] || STATUS_LABELS[s]}</>}
+                        ? 'bg-red-50 text-red-400 hover:bg-red-100'
+                        : 'bg-[#1B4332] text-white shadow-xl shadow-emerald-900/10 hover:scale-[1.02]'}`}>
+                    {updating ? 'Processing...' : `${STEP_ICONS[s]} ${BTN_LABELS[s] || STATUS_LABELS[s]}`}
                   </button>
                 ))}
               </div>
