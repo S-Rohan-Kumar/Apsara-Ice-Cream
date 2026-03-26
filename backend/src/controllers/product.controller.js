@@ -7,28 +7,32 @@ import Offer from "../models/offer.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 // Pricing helper
-const resolvePrice = (product, category, activeOffers) => {
-  if (!category || !category.basePrice) return {};
+const resolvePrice = (priceOverride, basePrice, activeOffers, categoryId) => {
+  if (!basePrice) return {};
 
   const base = {
-    small: product.priceOverride?.small ?? category.basePrice.small,
-    regular: product.priceOverride?.regular ?? category.basePrice.regular,
-    large: product.priceOverride?.large ?? category.basePrice.large,
-    binge: product.priceOverride?.binge ?? category.basePrice.binge,
+    small  : priceOverride?.small   ?? basePrice.small,
+    regular: priceOverride?.regular ?? basePrice.regular,
+    large  : priceOverride?.large   ?? basePrice.large,
+    binge  : priceOverride?.binge   ?? basePrice.binge,
   };
 
-  const offer = activeOffers.find(
-    (o) => !o.category || o.category.toString() === category._id.toString(),
-  );
+  const offer = activeOffers.find((o) => {
+    if (!o.category) return true; 
+    if (!categoryId) return false; 
+
+    return o.category.toString() === categoryId.toString();
+  });
 
   if (!offer) return base;
 
   const disc = offer.discountPercent / 100;
+
   return {
-    small: Math.round(base.small * (1 - disc)),
+    small  : Math.round(base.small   * (1 - disc)),
     regular: Math.round(base.regular * (1 - disc)),
-    large: Math.round(base.large * (1 - disc)),
-    binge: Math.round(base.binge * (1 - disc)),
+    large  : Math.round(base.large   * (1 - disc)),
+    binge  : Math.round(base.binge   * (1 - disc)),
   };
 };
 
