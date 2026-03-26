@@ -57,7 +57,7 @@ const getProducts = asyncHandler(async (req, res) => {
 
   const data = products.map((prod) => {
     const p = prod.toObject();
-    p.resolvedPrices = resolvePrice(prod, prod.category, activeOffers);
+    p.resolvedPrices = resolvePrice(p.priceOverride, p.category?.basePrice, activeOffers, p.category?._id);
     return p;
   });
 
@@ -81,7 +81,7 @@ const getAllProducts = asyncHandler(async (req, res) => {
   });
   const data = products.map((prod) => {
     const p = prod.toObject();
-    p.resolvedPrices = resolvePrice(prod, prod.category, activeOffers);
+    p.resolvedPrices = resolvePrice(p.priceOverride, p.category?.basePrice, activeOffers, p.category?._id);
     return p;
   });
   return res
