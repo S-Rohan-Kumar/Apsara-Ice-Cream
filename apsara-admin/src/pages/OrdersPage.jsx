@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { useGetAdminOrdersQuery } from '../slices/orderApiSlice';
@@ -6,133 +6,148 @@ import { clearOrders } from '../slices/socketSlice';
 import StatusBadge from '../components/common/StatusBadge';
 import Spinner from '../components/common/Spinner';
 
-const shortId  = (id) => id?.slice(-6).toUpperCase();
 const currency = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const timeAgo  = (iso) => {
+
+const timeAgo = (iso) => {
+  if (!iso) return '';
   const m = Math.floor((Date.now() - new Date(iso)) / 60000);
   if (m < 1) return 'Just now';
   if (m < 60) return `${m}m ago`;
-  return `${Math.floor(m / 60)}h ago`;
+  if (m < 1440) return `${Math.floor(m / 60)}h ago`;
+  return `${Math.floor(m / 1440)}d ago`;
 };
 
 const FILTERS = [
-  { label: 'Active Queue', value: 'placed,preparing', dot: 'bg-emerald-400' },
-  { label: 'In Transit',   value: 'out_for_delivery', dot: 'bg-amber-400' },
-  { label: 'Fulfilled',    value: 'delivered',         dot: 'bg-slate-400' },
-  { label: 'All History',  value: '',                  dot: 'bg-slate-200' },
+  { label: 'Active',       value: 'placed,preparing', dot: 'bg-red-400'     },
+  { label: 'Out for Del.', value: 'out_for_delivery',  dot: 'bg-[#F5A623]'  },
+  { label: 'Delivered',    value: 'delivered',          dot: 'bg-[#1B5E4B]' },
+  { label: 'All Orders',   value: '',                   dot: 'bg-gray-400'  },
 ];
 
 const CARD_ACCENT = {
-  placed:           'border-l-blue-400',
-  preparing:        'border-l-yellow-400',
-  out_for_delivery: 'border-l-amber-400',
-  delivered:        'border-l-emerald-500',
-  cancelled:        'border-l-red-400',
+  placed: 'border-l-blue-400',
+  preparing: 'border-l-yellow-400',
+  out_for_delivery: 'border-l-[#F5A623]',
+  delivered: 'border-l-[#1B5E4B]',
+  cancelled: 'border-l-red-400',
 };
 
-export default function OrdersPage() {
+export function OrdersPage() {
   const dispatch = useDispatch();
   const [filter, setFilter] = useState('placed,preparing');
 
-  useEffect(() => { dispatch(clearOrders()); }, [dispatch]);
+  useEffect(() => {
+    dispatch(clearOrders());
+  }, [dispatch]);
 
-  const { data, isLoading, isFetching } = useGetAdminOrdersQuery(
+  const { data, isLoading, isFetching, refetch } = useGetAdminOrdersQuery(
     { status: filter },
     { pollingInterval: 30000 }
   );
 
-  const orders = data?.orders || [];
-  const total  = data?.total  || 0;
+  const orders = useMemo(() => data?.orders || [], [data]);
+  const total = data?.total || 0;
 
   return (
-    <div className="min-h-screen bg-[#FBFCFB] pb-24">
-      {/* --- ORGANIC HEADER --- */}
-      <div className="px-8 pt-12 pb-20 bg-[#F2F7F2] rounded-b-[60px] border-b border-green-50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="px-3 py-1 bg-white rounded-full text-[10px] font-black text-emerald-700 uppercase tracking-widest shadow-sm">
-                Live Console
-              </span>
-              {isFetching && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />}
-            </div>
-            <h1 className="text-5xl font-black tracking-tight text-[#1B4332]">
-              Incoming <span className="text-emerald-500/60 font-serif italic">Scoops</span>
-            </h1>
-            <p className="text-emerald-900/40 font-bold text-xs uppercase tracking-[3px] mt-4">
-              Since 1971 • {total} Active Requests
-            </p>
-          </div>
-          
-          <div className="flex gap-2 bg-white/50 p-1.5 rounded-[24px] border border-green-100/50 backdrop-blur-md overflow-x-auto no-scrollbar">
-            {FILTERS.map((f) => (
-              <button 
-                key={f.value} 
-                onClick={() => setFilter(f.value)}
-                className={`px-6 py-3 rounded-[20px] text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap
-                  ${filter === f.value ? 'bg-[#1B4332] text-white shadow-xl shadow-emerald-900/20' : 'text-emerald-800/50 hover:text-emerald-800'}`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+    <div className='animate-in fade-in duration-500'>
+      <div className='flex items-center justify-between mb-5 sm:mb-6'>
+        <div>
+          <h1 className='text-xl sm:text-2xl font-extrabold text-gray-800 tracking-tight'>Live Orders</h1>
+          <p className='text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-0.5'>
+            {total} Total Collections {isFetching && <span className="animate-pulse">· Syncing...</span>}
+          </p>
         </div>
+
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className='p-2 hover:bg-gray-100 rounded-full transition-colors group'
+        >
+          <span className={`block ${isFetching ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`}>
+            🔄
+          </span>
+        </button>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 -mt-10">
-        {isLoading ? (
-          <div className="py-20 flex justify-center"><Spinner /></div>
-        ) : orders.length === 0 ? (
-          <div className="bg-white rounded-[48px] p-20 text-center shadow-sm border border-green-50">
-            <div className="text-6xl mb-6 opacity-30">🍦</div>
-            <h2 className="text-2xl font-black text-[#1B4332]">Queue is currently empty</h2>
-            <p className="text-gray-400 mt-2 font-medium">New orders will pop up here automatically.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {orders.map((order) => (
-              <Link 
-                key={order._id} 
-                to={`/orders/${order._id}`}
-                className={`group flex flex-col md:flex-row md:items-center gap-6 bg-white rounded-[32px] p-6 border border-transparent border-l-8 hover:border-emerald-100 hover:shadow-[0_20px_50px_rgba(27,67,50,0.05)] transition-all duration-500 ${CARD_ACCENT[order.status] || 'border-l-slate-200'}`}
-              >
-                <div className="flex items-center gap-6 flex-1 min-w-0">
-                  <div className="w-14 h-14 bg-[#F2F7F2] rounded-[22px] flex flex-col items-center justify-center shrink-0 group-hover:bg-[#1B4332] transition-colors duration-500">
-                    <span className="text-[8px] font-black text-slate-400 group-hover:text-emerald-200 uppercase mb-0.5">Order</span>
-                    <span className="font-mono font-black text-[#1B4332] text-xs group-hover:text-white">
-                      {shortId(order._id)}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-lg font-black text-slate-800 truncate group-hover:text-emerald-700 transition-colors">
-                        {order.customer?.name || order.customer?.phone}
-                      </h3>
-                      <StatusBadge status={order.status} />
-                    </div>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide truncate">
-                      {order.items?.map(i => `${i.productName} ×${i.quantity}`).join('  ·  ')}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between md:justify-end gap-8 md:border-l md:border-slate-50 md:pl-8">
-                  <div className="text-left md:text-right">
-                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Total Amount</p>
-                    <p className="text-xl font-black text-[#1B4332] leading-none">{currency(order.pricing?.total)}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[11px] font-bold text-amber-500 mb-1">{timeAgo(order.createdAt)}</p>
-                    <span className="px-2 py-0.5 bg-slate-100 rounded text-[9px] font-black text-slate-400 uppercase tracking-tighter">
-                      {order.payment?.method === 'cod' ? '💵 COD' : '💳 Paid'}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+      {/* Filter tabs — scrollable on small screens */}
+      <div className='flex gap-2 mb-5 sm:mb-6 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar'>
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setFilter(f.value)}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl text-[10px] sm:text-[11px] uppercase tracking-wider font-black
+                        transition-all border shadow-sm whitespace-nowrap shrink-0
+              ${filter === f.value
+                ? 'bg-[#1B5E4B] text-white border-[#1B5E4B] shadow-emerald-900/20'
+                : 'bg-white text-gray-500 border-gray-100 hover:border-emerald-200'}`}
+          >
+            <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${f.dot}`} />
+            {f.label}
+          </button>
+        ))}
       </div>
+
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20"><Spinner /></div>
+      ) : orders.length === 0 ? (
+        <div className='flex flex-col items-center justify-center py-16 sm:py-24 text-gray-300'>
+          <span className='text-6xl sm:text-7xl mb-4 grayscale opacity-30'>🍨</span>
+          <p className='text-xs font-black uppercase tracking-[3px] text-gray-400'>No orders in queue</p>
+        </div>
+      ) : (
+        <div className='space-y-3 sm:space-y-4'>
+          {orders.map((order) => (
+            <Link
+              key={order._id}
+              to={`/orders/${order._id}`}
+              className={`flex items-center gap-3 sm:gap-5 bg-white rounded-[24px] sm:rounded-[32px] p-3.5 sm:p-5 border-l-[6px]
+                          border border-gray-50 hover:shadow-xl hover:shadow-emerald-900/5
+                          hover:-translate-y-1 transition-all duration-300 block
+                          ${CARD_ACCENT[order.status] || 'border-l-gray-200'}`}
+            >
+              {/* Order number */}
+              <div className='shrink-0'>
+                <div className='min-w-[72px] sm:min-w-[84px] bg-[#F7FBF9] rounded-[16px] sm:rounded-[20px] px-2 sm:px-3 py-2 sm:py-3 text-center
+                                border border-emerald-50'>
+                  <p className='font-mono font-black text-[#1B5E4B] text-[11px] sm:text-[13px] tracking-tighter leading-none'>
+                    {order.orderNumber || `#${order._id.slice(-4).toUpperCase()}`}
+                  </p>
+                  <p className='text-[7px] sm:text-[8px] font-black text-emerald-300 uppercase mt-1'>Order ID</p>
+                </div>
+              </div>
+
+              <div className='flex-1 min-w-0'>
+                <div className='flex items-center gap-2 sm:gap-3 mb-1 sm:mb-1.5 flex-wrap'>
+                  <p className='font-black text-slate-800 text-sm sm:text-[15px] truncate'>
+                    {order.customer?.name || order.customer?.phone || 'Guest'}
+                  </p>
+                  <StatusBadge status={order.status} />
+                </div>
+                <p className='text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate'>
+                  {order.items?.map(i => `${i.productName} (${i.variant})`).join(' · ')}
+                </p>
+              </div>
+
+              <div className='text-right shrink-0'>
+                <p className='font-black text-slate-800 text-base sm:text-lg tracking-tight'>
+                  {currency(order.pricing?.total)}
+                </p>
+                <div className='flex flex-col items-end gap-1 mt-1'>
+                  <span className='text-[9px] font-black text-gray-300 uppercase tracking-widest bg-gray-50 px-1.5 sm:px-2 py-0.5 rounded-md'>
+                    {timeAgo(order.createdAt)}
+                  </span>
+                  <span className={`text-[10px] font-black uppercase tracking-tighter
+                                  ${order.payment?.method === 'cod' ? 'text-orange-500' : 'text-emerald-500'}`}>
+                    {order.payment?.method === 'cod' ? '💵 COD' : '💳 Paid'}
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+export default OrdersPage;

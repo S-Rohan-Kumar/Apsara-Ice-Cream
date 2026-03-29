@@ -1,35 +1,56 @@
+import { Router } from 'express';
 import {
   getProducts,
+  getAllProducts,
   getProductDetails,
   createProduct,
   updateProduct,
+  updateVariantAvailability,
   toggleStock,
   deleteProduct,
-  getAllProducts
-} from "../controllers/product.controller.js";
-import { Router } from "express";
-import authMiddleware from "../middleware/auth.middleware.js";
-import adminMiddleware from "../middleware/admin.middleware.js";
-import { upload } from "../middleware/multer.midleware.js";
+} from '../controllers/product.controller.js';
+import authMiddleware  from '../middleware/auth.middleware.js';
+import adminMiddleware from '../middleware/admin.middleware.js';
+import { upload }      from '../middleware/multer.midleware.js';
 
 const router = Router();
 
-router
-  .route("/")
-  .get(getProducts)
-  .post(authMiddleware, adminMiddleware, upload.single("image"), createProduct);
+// ── Public / Customer routes ──────────────────────────────────────────────────
+router.get('/',    getProducts);        // filters isAvailable:true
 
-router.get("/all",authMiddleware, adminMiddleware,getAllProducts);
+router.get('/all', authMiddleware, adminMiddleware, getAllProducts);
+router.get('/:id', getProductDetails);
 
+// ── Admin routes ──────────────────────────────────────────────────────────────
+// IMPORTANT: /all must come before /:id so Express doesn't treat 'all' as an ID
 
-router
-  .route("/:id")
-  .get(getProductDetails)
-  .patch(authMiddleware, adminMiddleware, upload.single("image"), updateProduct)
-  .delete(authMiddleware, adminMiddleware, deleteProduct);
+router.post('/',
+  authMiddleware, adminMiddleware,
+  upload.single('image'),
+  createProduct
+);
 
-router
-  .route("/:id/toggle-stock")
-  .patch(authMiddleware, adminMiddleware, toggleStock);
+router.patch('/:id',
+  authMiddleware, adminMiddleware,
+  upload.single('image'),
+  updateProduct
+);
+
+// Variant availability — for icecream products (per-size toggle)
+router.patch('/:id/variant-availability',
+  authMiddleware, adminMiddleware,
+  updateVariantAvailability
+);
+
+// Stock toggle — for single-type products only
+router.patch('/:id/toggle-stock',
+  authMiddleware, adminMiddleware,
+  toggleStock
+);
+
+router.delete('/:id',
+  authMiddleware, adminMiddleware,
+  deleteProduct
+);
 
 export default router;

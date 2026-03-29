@@ -26,7 +26,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='min-h-screen flex bg-[#FBFCFB]'>
+    <div className='min-h-screen flex flex-col lg:flex-row bg-[#FBFCFB]'>
       {/* Branding panel */}
       <div className='hidden lg:flex w-[480px] shrink-0 bg-[#1B4332] flex-col justify-between p-16 relative overflow-hidden'>
         <div className='absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl' />
@@ -65,28 +65,33 @@ export default function LoginPage() {
         <p className='relative text-white/20 text-[10px] font-bold uppercase tracking-widest'>© 2024 Apsara · Mandya</p>
       </div>
 
-      {/* Form area */}
-      <div className='flex-1 flex items-center justify-center p-12'>
-        <div className='w-full max-w-[360px] animate-in fade-in slide-in-from-right-8 duration-700'>
-          <div className='lg:hidden mb-12 flex justify-center'>
-            <div className='w-16 h-16 bg-[#1B4332] rounded-[24px] flex items-center justify-center text-3xl shadow-xl'>🍦</div>
-          </div>
+      {/* Mobile top bar */}
+      <div className='lg:hidden bg-[#1B4332] px-6 py-8 flex items-center gap-4'>
+        <div className='w-12 h-12 bg-white/10 rounded-[18px] flex items-center justify-center text-2xl shadow-xl'>🍦</div>
+        <div>
+          <p className='text-emerald-400/70 text-[9px] font-black tracking-[3px] uppercase'>Admin Portal</p>
+          <h1 className='text-white text-lg font-black tracking-tight'>Apsara Ice Creams</h1>
+        </div>
+      </div>
 
-          <h2 className='text-3xl font-black text-slate-800 tracking-tight mb-2'>Welcome Back</h2>
-          <p className='text-slate-400 text-xs font-bold mb-10 uppercase tracking-widest'>Secure Dashboard Access</p>
+      {/* Form area */}
+      <div className='flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-12'>
+        <div className='w-full max-w-[360px] animate-in fade-in slide-in-from-bottom-4 lg:slide-in-from-right-8 duration-700'>
+          <h2 className='text-2xl sm:text-3xl font-black text-slate-800 tracking-tight mb-2'>Welcome Back</h2>
+          <p className='text-slate-400 text-xs font-bold mb-8 sm:mb-10 uppercase tracking-widest'>Secure Dashboard Access</p>
 
           {error && (
-            <div className='bg-red-50 text-red-500 text-[11px] font-bold rounded-2xl px-5 py-4 mb-8 border border-red-100 flex items-center gap-3'>
+            <div className='bg-red-50 text-red-500 text-[11px] font-bold rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-6 sm:mb-8 border border-red-100 flex items-center gap-3'>
               <span className='text-lg'>⚠️</span> {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className='space-y-6'>
+          <form onSubmit={handleSubmit} className='space-y-5 sm:space-y-6'>
             <div>
               <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block'>Username</label>
               <input value={username} onChange={(e) => setUsername(e.target.value)}
                 placeholder='admin_apsara'
-                className='w-full bg-[#F2F7F2] border-none rounded-2xl px-6 py-4.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 transition-all' required />
+                className='w-full bg-[#F2F7F2] border-none rounded-2xl px-5 sm:px-6 py-4 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 transition-all' required />
             </div>
             <div>
               <label className='text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block'>Password</label>
@@ -94,15 +99,15 @@ export default function LoginPage() {
                 <input type={showPass ? 'text' : 'password'}
                   value={password} onChange={(e) => setPassword(e.target.value)}
                   placeholder='••••••••'
-                  className='w-full bg-[#F2F7F2] border-none rounded-2xl px-6 py-4.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 transition-all' required />
+                  className='w-full bg-[#F2F7F2] border-none rounded-2xl px-5 sm:px-6 py-4 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 transition-all' required />
                 <button type='button' onClick={() => setShowPass(!showPass)}
-                  className='absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 transition-colors'>
+                  className='absolute right-5 sm:right-6 top-1/2 -translate-y-1/2 text-slate-300 hover:text-emerald-500 transition-colors'>
                   {showPass ? '🙈' : '👁️'}
                 </button>
               </div>
             </div>
             <button type='submit' disabled={isLoading}
-              className='w-full bg-[#1B4332] text-white font-black py-5 rounded-[24px] 
+              className='w-full bg-[#1B4332] text-white font-black py-4 sm:py-5 rounded-[24px]
                          transition-all shadow-2xl shadow-emerald-900/10 hover:scale-[1.02] active:scale-[0.98]
                          disabled:opacity-50 flex items-center justify-center gap-3 text-[11px] uppercase tracking-[3px] mt-4'>
               {isLoading ? 'Processing...' : 'Access Dashboard'}

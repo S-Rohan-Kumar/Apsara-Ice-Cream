@@ -1,177 +1,112 @@
 import mongoose from 'mongoose';
-import Category from './models/category.model.js';
+import './models/category.model.js';
 import Product from './models/product.model.js';
+import Order, { OrderCounter } from './models/order.model.js'; // Ensure OrderCounter is exported
 import dotenv from 'dotenv';
 
-dotenv.config({
-  path: './.env',
-});
+dotenv.config({ path: './.env' });
 
+// ── Shared IDs ──────────────────────────────────────────────────────────────
+const CUSTOMERS = [
+  new mongoose.Types.ObjectId(),
+  new mongoose.Types.ObjectId(),
+  new mongoose.Types.ObjectId(),
+];
 
+// ── Modernized generateOrderNumber (Fixes Deprecation Warning) ──────────────
+const getCurrentFinancialYear = () => {
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const startYear = month >= 3 ? year : year - 1;
+  return `FY${startYear}-${(startYear + 1).toString().slice(-2)}`;
+};
+
+const getOrderNumber = async () => {
+  const fy = getCurrentFinancialYear();
+  const counter = await OrderCounter.findOneAndUpdate(
+    { financialYear: fy },
+    { $inc: { lastNumber: 1 } },
+    { returnDocument: 'after', upsert: true } // Use returnDocument: 'after'
+  );
+  return `ORD-${counter.lastNumber.toString().padStart(3, '0')}`;
+};
 
 const seed = async () => {
-  await mongoose.connect(`${process.env.MONGO_URL}/apsara_db`);
+  // Use a cleaner connection string
+  await mongoose.connect(process.env.MONGO_URI || `${process.env.MONGO_URL}/apsara_db`);
   console.log('Connected to DB');
 
-  // Clear existing data
-  await Category.deleteMany({});
-  await Product.deleteMany({});
-  console.log('Cleared existing data');
+  // CLEANUP: Optional - clear old orders to avoid ID collisions during testing
+  await Order.deleteMany({});
+  console.log('Cleared old orders');
 
-  // ── Categories ─────────────────────────────────────────────────────────────
-  const categories = await Category.insertMany([
+  const products = await Product.find({ isActive: true }).populate('category').limit(20);
+  if (!products.length) {
+    console.error('No products found — run the main seed first!');
+    process.exit(1);
+  }
+
+  const rndProduct = () => products[Math.floor(Math.random() * products.length)];
+
+  const makeItem = (product, variant, qty) => {
+    const cat = product.category;
+    let unitPrice = product.priceOverride?.[variant] || 
+                    (variant === 'single' ? cat.basePrice.regular : (cat.basePrice[variant] ?? cat.basePrice.regular));
+
+    return {
+      product: product._id,
+      productName: product.name,
+      variant,
+      isZeroSugar: product.isZeroSugar,
+      quantity: qty,
+      unitPrice,
+      totalPrice: unitPrice * qty,
+    };
+  };
+
+  const orderDefs = [
     {
-      name     : 'Fruitylicious',
-      imageUrl : '',
-      basePrice: { small: 90, regular: 135, large: 170, binge: 310 },
-      isActive : true,
-      sortOrder: 1,
-    },
-    {
-      name     : 'Chocolicious',
-      imageUrl : '',
-      basePrice: { small: 90, regular: 135, large: 170, binge: 310 },
-      isActive : true,
-      sortOrder: 2,
-    },
-    {
-      name     : 'Nuttylicious',
-      imageUrl : '',
-      basePrice: { small: 90, regular: 135, large: 170, binge: 310 },
-      isActive : true,
-      sortOrder: 3,
-    },
-    {
-      name     : 'Zero Added Sugar',
-      imageUrl : '',
-      basePrice: { small: 105, regular: 160, large: 200, binge: 350 },
-      isActive : true,
-      sortOrder: 4,
-    },
-    {
-      name     : 'Kulfis',
-      imageUrl : '',
-      basePrice: { small: 55, regular: 55, large: 55, binge: 55 },
-      isActive : true,
-      sortOrder: 5,
+      customer: CUSTOMERS[0],
+      items: [makeItem(rndProduct(), 'regular', 2)],
+      status: 'delivered',
+      delivery: { address: '12, Rose Garden, Mumbai', phone: '9876543210' },
+      payment: { method: 'online', status: 'paid', razorpayOrderId: `rzp_${Math.random()}` }, // Give unique IDs
+      pricing: { deliveryCharge: 20, discountAmount: 0, codCharge: 0 },
     },
     {
-      name     : 'Festive Special',
-      imageUrl : '',
-      basePrice: { small: 90, regular: 135, large: 170, binge: 310 },
-      isActive : true,
-      sortOrder: 6,
-    },
-    {
-      name     : 'Sorbelicious',
-      imageUrl : '',
-      basePrice: { small: 90, regular: 135, large: 170, binge: 310 },
-      isActive : true,
-      sortOrder: 7,
-    },
-    {
-      name     : 'Popsicles',
-      imageUrl : '',
-      basePrice: { small: 90, regular: 90, large: 90, binge: 90 },
-      isActive : true,
-      sortOrder: 8,
-    },
-  ]);
+      customer: CUSTOMERS[1],
+      items: [makeItem(rndProduct(), 'single', 3)],
+      status: 'out_for_delivery',
+      delivery: { address: '5B, Sea View, Bandra', phone: '9123456780' },
+      payment: { method: 'cod', status: 'pending', razorpayOrderId: null }, // Null works if index is sparse
+      pricing: { deliveryCharge: 20, discountAmount: 0, codCharge: 25 },
+    }
+  ];
 
-  console.log(`Inserted ${categories.length} categories`);
+  for (const def of orderDefs) {
+    const subtotal = def.items.reduce((sum, i) => sum + i.totalPrice, 0);
+    const total = subtotal - def.pricing.discountAmount + def.pricing.deliveryCharge + def.pricing.codCharge;
 
-  // helper to find category id by name
-  const cat = (name) => categories.find(c => c.name === name)._id;
+    const orderNum = await getOrderNumber();
 
-  // ── Products ───────────────────────────────────────────────────────────────
-  const products = await Product.insertMany([
+    await Order.create({
+      orderNumber: orderNum,
+      customer: def.customer,
+      items: def.items,
+      status: def.status,
+      delivery: def.delivery,
+      pricing: { ...def.pricing, subtotal, total },
+      payment: def.payment,
+    });
+    console.log(`Created ${orderNum} - ₹${total}`);
+  }
 
-    // Fruitylicious
-    { name: 'Asli Alphonso',     category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Blueberry Cheesecake', category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Coconut Cravings',  category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Guava Glory',       category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 4 },
-    { name: 'Scrumptious Sitafal', category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 5 },
-    { name: 'Orange Apricot',    category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 6 },
-    { name: 'Luscious Lychee',   category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 7 },
-    { name: 'Pinaberry Passion', category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 8 },
-    { name: 'Strawberry Story',  category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 9 },
-    { name: 'Trippy Targola',    category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 10 },
-    { name: 'Cheeky Chikoo',     category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 11 },
-    { name: 'Jamun Josh',        category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 12 },
-    { name: 'Jackfruit Jazz',    category: cat('Fruitylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 13 },
-
-    // Chocolicious
-    { name: 'Belgian Bite',      category: cat('Chocolicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Brownie Blast',     category: cat('Chocolicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Choco Cherry',      category: cat('Chocolicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Cookies N Cream',   category: cat('Chocolicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 4 },
-    { name: 'Funky Ferrero',     category: cat('Chocolicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 5 },
-    { name: 'Mississippi Madness', category: cat('Chocolicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 6 },
-
-    // Nuttylicious
-    { name: 'Pan Pasand',        category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Falooda Funda',     category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Kesar Pistachio',   category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Anjeer Andaaz',     category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 4 },
-    { name: 'Roasted Almonde',   category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 5 },
-    { name: 'Vanilla Vibes',     category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 6 },
-    { name: 'Butterscotch Crunch', category: cat('Nuttylicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 7 },
-
-    // Zero Added Sugar
-    { name: 'Pinaberry Passion', category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Jamun Josh',        category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Scrumptious Sitafal', category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Guava Glory',       category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 4 },
-    { name: 'Asli Alphonso',     category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 5 },
-    { name: 'Anjeer Andaaz',     category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 6 },
-    { name: 'Belgian Bite',      category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 7 },
-    { name: 'Kesar Pistachio',   category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 8 },
-    { name: 'Orange Chocolate',  category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 9 },
-    { name: 'Strawberry Story',  category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 10 },
-    { name: 'Roasted Almonde',   category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 11 },
-    { name: 'Vanilla Vibes',     category: cat('Zero Added Sugar'), isZeroSugar: true, isAvailable: true, isActive: true, sortOrder: 12 },
-
-    // Kulfis
-    { name: 'Gulkand Kulfi',     category: cat('Kulfis'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Raj Bhog Kulfi',    category: cat('Kulfis'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Malai Kulfi',       category: cat('Kulfis'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Malai Slice',       category: cat('Kulfis'), isZeroSugar: false, isAvailable: true, isActive: true,
-      priceOverride: { small: 110, regular: 110, large: 110, binge: 110 },
-      sortOrder: 4
-    },
-
-    // Festive Special
-    { name: 'Crunchy Chikki',    category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Red Velvet',        category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Thandi Thandai',    category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Boondi Modakam',    category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 4 },
-    { name: 'Fruit N Nut',       category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 5 },
-    { name: 'Shahi Daawat',      category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 6 },
-    { name: 'Diwali Delight',    category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 7 },
-    { name: 'Royal Rasmalai',    category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 8 },
-    { name: 'Mint Marvel',       category: cat('Festive Special'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 9 },
-
-    // Sorbelicious
-    { name: 'Berry Bonanza',     category: cat('Sorbelicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Pani Puri Patakha', category: cat('Sorbelicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Tamarind Twist',    category: cat('Sorbelicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Watermelon Wonder', category: cat('Sorbelicious'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 4 },
-
-    // Popsicles
-    { name: 'Berry Bahar',       category: cat('Popsicles'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 1 },
-    { name: 'Namaste Guava',     category: cat('Popsicles'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 2 },
-    { name: 'Desi Citrus',       category: cat('Popsicles'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 3 },
-    { name: 'Pinakiwi Masti',    category: cat('Popsicles'), isZeroSugar: false, isAvailable: true, isActive: true, sortOrder: 4 },
-
-  ]);
-
-  console.log(`Inserted ${products.length} products`);
-  console.log('Seed complete ✅');
+  console.log(`\nSample orders inserted ✅`);
   process.exit(0);
 };
 
-seed().catch((err) => {
-  console.error('Seed failed:', err);
+seed().catch(err => {
+  console.error('Order seed failed:', err);
   process.exit(1);
 });

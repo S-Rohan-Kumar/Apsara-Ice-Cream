@@ -27,28 +27,28 @@ export function BroadcastPage() {
   };
 
   return (
-    <div className='max-w-4xl mx-auto pb-20'>
-      <div className='mb-8'>
-        <h1 className='text-2xl font-black text-[#1B4332]'>Broadcast</h1>
+    <div className='max-w-4xl mx-auto pb-20 px-4 sm:px-6'>
+      <div className='mb-6 sm:mb-8'>
+        <h1 className='text-xl sm:text-2xl font-black text-[#1B4332]'>Broadcast</h1>
         <p className='text-[11px] font-bold text-emerald-900/40 uppercase tracking-widest mt-1'>
           Reach all customers instantly
         </p>
       </div>
 
-      <div className='grid lg:grid-cols-2 gap-8'>
-        <div className='space-y-6'>
+      <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8'>
+        <div className='space-y-4 sm:space-y-6'>
           {/* Templates */}
-          <div className='bg-white rounded-[32px] border border-green-50 shadow-sm p-6'>
-            <p className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4'>
+          <div className='bg-white rounded-[24px] sm:rounded-[32px] border border-green-50 shadow-sm p-4 sm:p-6'>
+            <p className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3 sm:mb-4'>
               Quick Templates
             </p>
-            <div className='grid grid-cols-1 gap-2'>
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2'>
               {TEMPLATES.map((t) => (
                 <button key={t.title}
                   onClick={() => { setTitle(t.title); setBody(t.body); }}
                   className='flex items-center gap-3 text-left p-3 rounded-2xl border border-transparent
                              hover:border-emerald-100 hover:bg-[#F2F7F2] transition-all group'>
-                  <span className='text-lg grayscale group-hover:grayscale-0 transition-all'>{t.icon}</span>
+                  <span className='text-lg grayscale group-hover:grayscale-0 transition-all shrink-0'>{t.icon}</span>
                   <span className='text-[11px] font-bold text-slate-600 truncate'>{t.title}</span>
                 </button>
               ))}
@@ -56,8 +56,8 @@ export function BroadcastPage() {
           </div>
 
           {/* Compose */}
-          <div className='bg-white rounded-[32px] border border-green-50 shadow-sm p-6'>
-            <p className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4'>
+          <div className='bg-white rounded-[24px] sm:rounded-[32px] border border-green-50 shadow-sm p-4 sm:p-6'>
+            <p className='text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3 sm:mb-4'>
               Compose Message
             </p>
             <div className='space-y-4'>
@@ -85,16 +85,16 @@ export function BroadcastPage() {
           </div>
         </div>
 
-        <div className='space-y-6'>
+        <div className='space-y-4 sm:space-y-6'>
           {/* Phone preview */}
-          <div className='bg-slate-900 rounded-[40px] p-6 shadow-2xl relative overflow-hidden'>
+          <div className='bg-slate-900 rounded-[32px] sm:rounded-[40px] p-4 sm:p-6 shadow-2xl relative overflow-hidden'>
             <div className='absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-slate-800 rounded-b-xl' />
-            <p className='text-[9px] font-black text-slate-500 uppercase tracking-widest mb-6 mt-2 text-center'>
+            <p className='text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 sm:mb-6 mt-2 text-center'>
               Preview on Device
             </p>
-            <div className='bg-white/10 backdrop-blur-md rounded-2xl p-4 flex items-start gap-3 border border-white/5'>
-              <div className='w-10 h-10 bg-[#1B4332] rounded-xl flex items-center justify-center
-                              text-lg shrink-0'>🍦</div>
+            <div className='bg-white/10 backdrop-blur-md rounded-2xl p-3 sm:p-4 flex items-start gap-3 border border-white/5'>
+              <div className='w-9 h-9 sm:w-10 sm:h-10 bg-[#1B4332] rounded-xl flex items-center justify-center
+                              text-base sm:text-lg shrink-0'>🍦</div>
               <div className='flex-1 min-w-0'>
                 <p className='font-black text-white text-[12px] truncate'>{title || 'Notification Title'}</p>
                 <p className='text-slate-400 text-[11px] mt-0.5 line-clamp-2 leading-relaxed'>
@@ -106,7 +106,7 @@ export function BroadcastPage() {
           </div>
 
           <button onClick={handleSend} disabled={isLoading}
-            className='w-full bg-[#1B4332] text-white font-black py-5 rounded-[24px]
+            className='w-full bg-[#1B4332] text-white font-black py-4 sm:py-5 rounded-[20px] sm:rounded-[24px]
                        transition-all disabled:opacity-50 shadow-xl shadow-emerald-900/20
                        flex items-center justify-center gap-2 text-[11px] uppercase tracking-[2px]'>
             {isLoading
@@ -115,15 +115,15 @@ export function BroadcastPage() {
           </button>
 
           {result && (
-            <div className='bg-emerald-50 rounded-[32px] p-6 border border-emerald-100 animate-in fade-in slide-in-from-bottom-4'>
-              <div className='grid grid-cols-3 gap-3'>
+            <div className='bg-emerald-50 rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 border border-emerald-100 animate-in fade-in slide-in-from-bottom-4'>
+              <div className='grid grid-cols-3 gap-2 sm:gap-3'>
                 {[
                   { label:'Reach', value:result.totalUsers, cls:'text-slate-800' },
                   { label:'Sent',  value:result.sent,       cls:'text-emerald-600' },
                   { label:'Err',   value:result.failed,     cls:'text-red-400' },
                 ].map((s) => (
-                  <div key={s.label} className='bg-white rounded-2xl p-3 text-center'>
-                    <p className={`text-lg font-black ${s.cls}`}>{s.value}</p>
+                  <div key={s.label} className='bg-white rounded-2xl p-2 sm:p-3 text-center'>
+                    <p className={`text-base sm:text-lg font-black ${s.cls}`}>{s.value}</p>
                     <p className='text-[8px] text-slate-400 font-black uppercase tracking-tighter'>
                       {s.label}
                     </p>

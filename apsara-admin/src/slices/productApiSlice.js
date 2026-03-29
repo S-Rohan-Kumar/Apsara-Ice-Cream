@@ -1,13 +1,12 @@
 import { PRODUCTS_URL } from '../constants.js';
 import { apiSlice }     from './apiSlice.js';
 
-
 export const productApiSlice = apiSlice.injectEndpoints({
-    endpoints: (builder) => ({
- 
-    // GET /api/products?category=:id
+  endpoints: (builder) => ({
+
+    // Admin — all products including out of stock
     getProducts: builder.query({
-      query: (categoryId) => ({
+      query: ({ categoryId } = {}) => ({
         url   : `${PRODUCTS_URL}/all`,
         params: categoryId ? { category: categoryId } : {},
       }),
@@ -15,8 +14,17 @@ export const productApiSlice = apiSlice.injectEndpoints({
       providesTags    : ['Product'],
       keepUnusedDataFor: 60,
     }),
- 
-    // POST /api/products — multipart/form-data for image
+
+    // Customer facing (not used in dashboard)
+    getPublicProducts: builder.query({
+      query: ({ categoryId } = {}) => ({
+        url   : PRODUCTS_URL,
+        params: categoryId ? { category: categoryId } : {},
+      }),
+      transformResponse: (res) => res.data,
+      keepUnusedDataFor: 60,
+    }),
+
     createProduct: builder.mutation({
       query: (formData) => ({
         url   : PRODUCTS_URL,
@@ -26,8 +34,7 @@ export const productApiSlice = apiSlice.injectEndpoints({
       transformResponse: (res) => res.data,
       invalidatesTags: ['Product'],
     }),
- 
-    // PATCH /api/products/:id
+
     updateProduct: builder.mutation({
       query: ({ id, formData }) => ({
         url   : `${PRODUCTS_URL}/${id}`,
@@ -37,8 +44,19 @@ export const productApiSlice = apiSlice.injectEndpoints({
       transformResponse: (res) => res.data,
       invalidatesTags: ['Product'],
     }),
- 
-    // PATCH /api/products/:id/toggle-stock
+
+    // Update per-variant availability for icecream products
+    updateVariantAvailability: builder.mutation({
+      query: ({ id, ...availability }) => ({
+        url   : `${PRODUCTS_URL}/${id}/variant-availability`,
+        method: 'PATCH',
+        body  : availability, // { small: true, regular: false, large: true, ... }
+      }),
+      transformResponse: (res) => res.data,
+      invalidatesTags: ['Product'],
+    }),
+
+    // Toggle stock for single-type products
     toggleStock: builder.mutation({
       query: (id) => ({
         url   : `${PRODUCTS_URL}/${id}/toggle-stock`,
@@ -47,8 +65,7 @@ export const productApiSlice = apiSlice.injectEndpoints({
       transformResponse: (res) => res.data,
       invalidatesTags: ['Product'],
     }),
- 
-    // DELETE /api/products/:id
+
     deleteProduct: builder.mutation({
       query: (id) => ({
         url   : `${PRODUCTS_URL}/${id}`,
@@ -57,15 +74,16 @@ export const productApiSlice = apiSlice.injectEndpoints({
       transformResponse: (res) => res.data,
       invalidatesTags: ['Product'],
     }),
- 
+
   }),
 });
- 
+
 export const {
   useGetProductsQuery,
+  useGetPublicProductsQuery,
   useCreateProductMutation,
   useUpdateProductMutation,
+  useUpdateVariantAvailabilityMutation,
   useToggleStockMutation,
   useDeleteProductMutation,
 } = productApiSlice;
-

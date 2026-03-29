@@ -7,7 +7,7 @@ export const categoryApiSlice = apiSlice.injectEndpoints({
     getCategories: builder.query({
       query: () => CATEGORIES_URL,
       transformResponse: (res) => res.data,
-      providesTags: ["Category"],
+      invalidatesTags: ["Category", "Product"],
       keepUnusedDataFor: 5,
     }),
 
@@ -19,7 +19,7 @@ export const categoryApiSlice = apiSlice.injectEndpoints({
         body: data,
       }),
       transformResponse: (res) => res.data,
-      invalidatesTags: ["Category"],
+      invalidatesTags: ["Category", "Product"]
     }),
 
     // PATCH /api/categories/:id
@@ -30,7 +30,7 @@ export const categoryApiSlice = apiSlice.injectEndpoints({
         body: data,
       }),
       transformResponse: (res) => res.data,
-      invalidatesTags: ["Category"],
+      invalidatesTags: ["Category", "Product"]
     }),
   }),
 });
