@@ -62,6 +62,7 @@ const fetchProductsMap = async (items) => {
 // ─── POST /api/orders/initiate ────────────────────────────────────────────────
 const initiateOrder = asyncHandler(async (req, res) => {
   const { items, paymentMethod } = req.body;
+  console.log("Initate hit")
 
   if (!items || items.length === 0) throw new APIError(400, 'Order must have at least one item');
   if (!paymentMethod || !['online', 'cod'].includes(paymentMethod)) {
@@ -83,6 +84,8 @@ const initiateOrder = asyncHandler(async (req, res) => {
     if (!isVariantAvailable(product, item.variant)) {
       throw new APIError(400, `${product.name} (${item.variant}) is not available`);
     }
+
+    console.log(items,paymentMethod)
 
     const isSingle = product.category.productType === 'single';
     const v        = isSingle ? 'regular' : item.variant;
@@ -148,7 +151,7 @@ const confirmOrder = asyncHandler(async (req, res) => {
 
   const now          = new Date();
   const activeOffers = await Offer.find({ isActive:true, startsAt:{$lte:now}, expiresAt:{$gte:now} });
-  const productMap   = await fetchProductsMap(items); // ← single DB query
+  const productMap   = await fetchProductsMap(items); 
 
   const orderItems = [];
   let subtotal     = 0;

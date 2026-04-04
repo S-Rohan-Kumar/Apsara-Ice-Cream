@@ -22,7 +22,7 @@ const createSession = async (user) => {
   const accessToken = jwt.sign(
     { _id: user._id, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: "15m" }   // short-lived — Redis session is the source of truth
+    { expiresIn: "15m" }  
   );
 
   return { accessToken, payload };
@@ -36,29 +36,42 @@ const verifyAuth = asyncHandler(async (req, res) => {
   }
 
   const firebaseToken = header.split(" ")[1];
-  const decoded       = await admin.auth().verifyIdToken(firebaseToken);
+  const decoded = await admin.auth().verifyIdToken(firebaseToken);
 
   const { uid: firebaseUid, phone_number: phone } = decoded;
   if (!phone) throw new APIError(400, "Phone number not found in token");
 
   const role = phone === process.env.ADMIN_PHONE ? "admin" : "customer";
 
-  const { value: user, lastErrorObject } = await User.findOneAndUpdate(
+  const result = await User.findOneAndUpdate(
     { firebaseUid },
     {
       $setOnInsert: { firebaseUid, phone, name: "" },
-      $set: { role },               
+      $set: { role },
     },
-    { upsert: true, new: true, rawResult: true }
+    { 
+      upsert: true, 
+      returnDocument: 'after', 
+      includeResultMetadata: true 
+    }
   );
 
-  const isNewUser = lastErrorObject?.updatedExisting === false;
+  const user = result.value;
+  
+  if (!user) {
+    throw new APIError(500, "Failed to synchronize user data");
+  }
+
+  const isNewUser = result.lastErrorObject?.updatedExisting === false;
 
   const { accessToken, payload } = await createSession(user);
 
   return res.status(200).json(
-    new APIResponse(200, { accessToken, isNewUser, user: payload },
-      isNewUser ? "Account created" : "Login successful")
+    new APIResponse(
+      200, 
+      { accessToken, isNewUser, user: payload },
+      isNewUser ? "Account created" : "Login successful"
+    )
   );
 });
 

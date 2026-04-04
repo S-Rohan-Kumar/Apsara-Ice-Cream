@@ -43,12 +43,6 @@ export const cache = (prefix, ttl = 300, keyFn = null) =>
     next();
   };
 
-/**
- * Pattern-delete all keys under one or more cache namespaces.
- * Call this inside any controller that mutates data.
- *
- * e.g. await invalidate("products", "categories")
- */
 export const invalidate = async (...prefixes) => {
   try {
     const pipeline = redis.pipeline();

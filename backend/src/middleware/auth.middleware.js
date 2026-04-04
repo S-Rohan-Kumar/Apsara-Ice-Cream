@@ -11,11 +11,16 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "No token provided" });
     }
 
+    console.log(`This is header : ${header}`)
+
     const token = header.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const sessionKey = `session:${decoded._id}`;
     let sessionData;
+
+    console.log(`This is token : ${token}`)
+    console.log(decoded)
 
     try {
       const cached = await redis.get(sessionKey);
