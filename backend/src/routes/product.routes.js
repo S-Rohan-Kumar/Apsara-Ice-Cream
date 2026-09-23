@@ -7,6 +7,7 @@ import {
   updateProduct,
   updateVariantAvailability,
   toggleStock,
+  snoozeProduct,
   deleteProduct,
 } from '../controllers/product.controller.js';
 import authMiddleware  from '../middleware/auth.middleware.js';
@@ -46,6 +47,11 @@ router.patch('/:id/variant-availability',
 router.patch('/:id/toggle-stock',
   authMiddleware, adminMiddleware,
   toggleStock
+);
+
+router.patch('/:id/snooze',
+  authMiddleware, adminMiddleware,
+  snoozeProduct
 );
 
 router.delete('/:id',
