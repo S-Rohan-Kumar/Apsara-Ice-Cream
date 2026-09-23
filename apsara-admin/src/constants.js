@@ -1,5 +1,5 @@
-export const BASE_URL        = "https://apsara-ice-cream.onrender.com/api";
-export const SOCKET_URL      = "https://apsara-ice-cream.onrender.com";
+export const BASE_URL        = "http://localhost:8000/api";
+export const SOCKET_URL      = "http://localhost:8000";
  
 export const CATEGORIES_URL  = '/categories';
 export const PRODUCTS_URL    = '/products';
@@ -7,7 +7,7 @@ export const ORDERS_URL      = '/orders';
 export const OFFERS_URL      = '/offers';
 export const AUTH_URL        = '/auth';
 export const ADMIN_URL       = '/admin';
- 
+  
 export const STATUS_LABELS = {
   placed          : 'Order Placed',
   preparing       : 'Preparing',

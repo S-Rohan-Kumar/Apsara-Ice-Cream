@@ -3,11 +3,17 @@ import { BASE_URL } from "../constants.js";
 
 const baseQuery = fetchBaseQuery({
   baseUrl: BASE_URL,
-  prepareHeaders: (headers) => {
-    const userInfo = localStorage.getItem("userInfo");
-    if (userInfo) {
-      const { token } = JSON.parse(userInfo);
-      if (token) headers.set("Authorization", `Bearer ${token}`);
+  prepareHeaders: (headers, { getState }) => {
+    const userInfo = getState().auth?.userInfo;
+    
+    const localUser = userInfo || JSON.parse(localStorage.getItem("userInfo") || "null");
+
+    if (localUser) {
+      const token = localUser.accessToken || localUser.token;
+      
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
     }
     return headers;
   },
