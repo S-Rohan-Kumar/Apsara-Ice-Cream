@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
   verifyAuth,
+  sendOtp,
+  verifyOtp,
   getCurrentUser,
   updateProfile,
   saveFcmToken,
@@ -12,7 +14,9 @@ import authMiddleware from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-// Public — Firebase token in header
+// Public — OTP and login
+router.post("/auth/send-otp", sendOtp);
+router.post("/auth/verify-otp", verifyOtp);
 router.post("/auth/verify", verifyAuth);
 router.post("/auth/admin-login", adminLogin);
 

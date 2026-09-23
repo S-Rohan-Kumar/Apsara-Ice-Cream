@@ -28,9 +28,13 @@ const VARIANT_META = {
 
 const formatSnooze = (iso) => {
   if (!iso) return null;
-  const diffMs = new Date(iso) - new Date();
+  const target = new Date(iso);
+  const diffMs = target - new Date();
   if (diffMs <= 0) return null;
   const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  if (hours > 24) {
+    return `till ${target.toLocaleDateString('en-IN', { day:'numeric', month:'short' })}`;
+  }
   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
   return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
 };
@@ -167,6 +171,9 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
 function SnoozeModal({ product, variant, onClose }) {
   const [snoozeProduct, { isLoading }] = useSnoozeProductMutation();
   const { showSuccess, showError } = useToast();
+  const [dateMode, setDateMode] = useState(false);
+  const [startsAt, setStartsAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [expiresAt, setExpiresAt] = useState('');
 
   const handleSnooze = async (hours) => {
     try {
@@ -185,6 +192,31 @@ function SnoozeModal({ product, variant, onClose }) {
     }
   };
 
+  const handleDateSnooze = async (e) => {
+    e.preventDefault();
+    if (!expiresAt) {
+      showError('Please pick an end date/time');
+      return;
+    }
+    if (new Date(expiresAt) <= new Date(startsAt)) {
+      showError('End date must be after start date');
+      return;
+    }
+    try {
+      await snoozeProduct({
+        id: product._id,
+        variant,
+        startsAt,
+        expiresAt,
+      }).unwrap();
+      const targetName = variant ? `${VARIANT_META[variant]?.label || variant}` : 'Product';
+      showSuccess(`${targetName} snoozed until ${new Date(expiresAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' })}`);
+      onClose();
+    } catch (e) {
+      showError(e?.data?.message || 'Failed to set date snooze');
+    }
+  };
+
   const isVariantOff = variant && (
     product.variantAvailability?.[variant] === false ||
     (product.variantSnoozedUntil?.[variant] && new Date(product.variantSnoozedUntil[variant]) > new Date())
@@ -196,45 +228,96 @@ function SnoozeModal({ product, variant, onClose }) {
 
   return (
     <div className='fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
-      <div className='bg-white rounded-3xl shadow-2xl w-full max-w-xs overflow-hidden animate-in fade-in zoom-in-95 duration-200'>
+      <div className='bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200'>
         <div className='bg-[#1B5E4B] px-5 py-4 flex items-center justify-between'>
           <div>
-            <h2 className='text-sm font-extrabold text-white truncate max-w-[200px]'>{titleLabel}</h2>
+            <h2 className='text-sm font-extrabold text-white truncate max-w-[240px]'>{titleLabel}</h2>
             <p className='text-white/60 text-xs mt-0.5'>Stock Timer</p>
           </div>
           <button onClick={onClose} className='text-white/60 hover:text-white text-xl leading-none'>×</button>
         </div>
 
-        <div className='p-4 space-y-2.5'>
-          <p className='text-xs font-bold text-gray-400 uppercase tracking-wider px-1'>
-            {variant ? `Turn off ${VARIANT_META[variant]?.label || ''} for:` : 'Turn off for:'}
-          </p>
-          
-          <div className='grid grid-cols-2 gap-2'>
-            {[
-              { label: '2 Hours', hours: 2 },
-              { label: '5 Hours', hours: 5 },
-              { label: '10 Hours', hours: 10 },
-              { label: '24 Hours', hours: 24 },
-            ].map(({ label, hours }) => (
-              <button
-                key={hours}
-                disabled={isLoading}
-                onClick={() => handleSnooze(hours)}
-                className='py-2.5 px-3 rounded-xl border border-gray-200 hover:border-[#1B5E4B] hover:bg-[#F7FBF9] text-gray-700 hover:text-[#1B5E4B] font-bold text-xs transition active:scale-95 disabled:opacity-50'
-              >
-                ⏱️ {label}
-              </button>
-            ))}
+        <div className='p-4 space-y-3'>
+          <div className='flex gap-1 p-1 bg-gray-100 rounded-xl'>
+            <button
+              type='button'
+              onClick={() => setDateMode(false)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition ${!dateMode ? 'bg-white text-[#1B5E4B] shadow-sm' : 'text-gray-500'}`}
+            >
+              ⚡ Quick Hours
+            </button>
+            <button
+              type='button'
+              onClick={() => setDateMode(true)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition ${dateMode ? 'bg-white text-[#1B5E4B] shadow-sm' : 'text-gray-500'}`}
+            >
+              📅 Date to Date
+            </button>
           </div>
 
-          <button
-            disabled={isLoading}
-            onClick={() => handleSnooze(-1)}
-            className='w-full py-2.5 px-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs transition active:scale-95 disabled:opacity-50'
-          >
-            🛑 Until I mark it on
-          </button>
+          {!dateMode ? (
+            <>
+              <p className='text-xs font-bold text-gray-400 uppercase tracking-wider px-1'>
+                {variant ? `Turn off ${VARIANT_META[variant]?.label || ''} for:` : 'Turn off for:'}
+              </p>
+              
+              <div className='grid grid-cols-2 gap-2'>
+                {[
+                  { label: '2 Hours', hours: 2 },
+                  { label: '5 Hours', hours: 5 },
+                  { label: '10 Hours', hours: 10 },
+                  { label: '24 Hours', hours: 24 },
+                ].map(({ label, hours }) => (
+                  <button
+                    key={hours}
+                    disabled={isLoading}
+                    onClick={() => handleSnooze(hours)}
+                    className='py-2.5 px-3 rounded-xl border border-gray-200 hover:border-[#1B5E4B] hover:bg-[#F7FBF9] text-gray-700 hover:text-[#1B5E4B] font-bold text-xs transition active:scale-95 disabled:opacity-50'
+                  >
+                    ⏱️ {label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                disabled={isLoading}
+                onClick={() => handleSnooze(-1)}
+                className='w-full py-2.5 px-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs transition active:scale-95 disabled:opacity-50'
+              >
+                🛑 Until I mark it on
+              </button>
+            </>
+          ) : (
+            <form onSubmit={handleDateSnooze} className='space-y-3 pt-1'>
+              <div className='space-y-1'>
+                <label className='text-[10px] font-black text-gray-400 uppercase tracking-wider'>Starts At</label>
+                <input
+                  type='datetime-local'
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  className='w-full bg-[#F7FBF9] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]'
+                  required
+                />
+              </div>
+              <div className='space-y-1'>
+                <label className='text-[10px] font-black text-gray-400 uppercase tracking-wider'>Expires At (Turn On)</label>
+                <input
+                  type='datetime-local'
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className='w-full bg-[#F7FBF9] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]'
+                  required
+                />
+              </div>
+              <button
+                type='submit'
+                disabled={isLoading}
+                className='w-full py-2.5 rounded-xl bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold text-xs shadow-md shadow-[#1B5E4B]/20 transition active:scale-95 disabled:opacity-50'
+              >
+                {isLoading ? 'Saving...' : 'Apply Date Snooze'}
+              </button>
+            </form>
+          )}
 
           {isOff && (
             <button
@@ -442,10 +525,12 @@ export default function ProductsPage() {
                           </span>
                         </td>
 
-                        <td className='px-5 py-4 font-bold text-gray-700 text-sm'>
-                          {isIcecreamProduct
-                            ? `₹${p.resolvedPrices?.small || 0} – ₹${p.resolvedPrices?.shareIt || p.resolvedPrices?.binge || 0}`
-                            : currency(p.resolvedPrices?.regular || 0)}
+                        <td className='px-5 py-4'>
+                          <span className='font-bold text-gray-800 text-sm'>
+                            {isIcecreamProduct
+                              ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0} – ₹${p.basePrices?.shareIt || p.basePrices?.binge || p.resolvedPrices?.shareIt || p.resolvedPrices?.binge || 0}`
+                              : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
+                          </span>
                         </td>
 
                         <td className='px-5 py-4'>
@@ -555,11 +640,13 @@ export default function ProductsPage() {
                         )}
                       </div>
                     </div>
-                    <p className='font-bold text-gray-700 text-sm shrink-0'>
-                      {isIcecreamProduct
-                        ? `₹${p.resolvedPrices?.small || 0}+`
-                        : currency(p.resolvedPrices?.regular || 0)}
-                    </p>
+                    <div className='flex flex-col items-end shrink-0'>
+                      <p className='font-bold text-gray-800 text-sm'>
+                        {isIcecreamProduct
+                          ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0}+`
+                          : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
+                      </p>
+                    </div>
                   </div>
 
                   <div className='flex items-center justify-between gap-2'>

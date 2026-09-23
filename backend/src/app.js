@@ -11,9 +11,23 @@ const server = http.createServer(app)
 
 initSocket(server);
 
-app.use(helmet())
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+}));
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowed = [
+        "http://localhost:5173",
+        "http://localhost:8081",
+        "http://localhost:8082",
+        "http://localhost:19006",
+      ];
+      if (allowed.includes(origin) || origin.startsWith("http://192.168.") || origin.startsWith("http://localhost:")) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true
 }));
 app.use(express.json({limit: '16kb'}));
@@ -31,6 +45,7 @@ import productRoute from "./routes/product.routes.js"
 import offerRoute from "./routes/offers.routes.js"
 import orderRoute from "./routes/order.routes.js"
 import adminRoute from "./routes/admin.routes.js"
+import notificationRoute from "./routes/notification.routes.js"
 
 
 //All routes 
@@ -40,6 +55,7 @@ app.use('/api/products', productRoute)
 app.use('/api/offers', offerRoute)
 app.use('/api/orders', orderRoute);
 app.use('/api/admin',  adminRoute);
+app.use('/api/notifications', notificationRoute);
 
 
 app.use(errorHandler)

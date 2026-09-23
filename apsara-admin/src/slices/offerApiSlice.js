@@ -17,13 +17,11 @@ export const offerApiSlice = apiSlice.injectEndpoints({
         url: `${OFFERS_URL}/`,
         method: "POST",
         body: data,
-        // data: { title, discountPercent, category, startsAt, expiresAt }
       }),
       transformResponse: (res) => res.data,
-      invalidatesTags: ["Offer"],
+      invalidatesTags: ["Offer", "Product"],
     }),
 
-    // PATCH /api/offers/:id
     updateOffer: builder.mutation({
       query: ({ id, ...data }) => ({
         url: `${OFFERS_URL}/${id}`,
@@ -31,17 +29,16 @@ export const offerApiSlice = apiSlice.injectEndpoints({
         body: data,
       }),
       transformResponse: (res) => res.data,
-      invalidatesTags: ["Offer"],
+      invalidatesTags: ["Offer", "Product"],
     }),
 
-    // DELETE /api/admin/offers/:id
     deleteOffer: builder.mutation({
       query: (id) => ({
         url: `${OFFERS_URL}/${id}`,
         method: "DELETE",
       }),
       transformResponse: (res) => res.data,
-      invalidatesTags: ["Offer"],
+      invalidatesTags: ["Offer", "Product"],
     }),
   }),
 });

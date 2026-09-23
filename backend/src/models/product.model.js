@@ -55,6 +55,16 @@ const ProductSchema = new Schema(
                 shareIt: null,
             }),
         },
+        variantSnoozedFrom: {
+            type: VariantSnoozeSchema,
+            default: () => ({
+                small: null,
+                regular: null,
+                large: null,
+                binge: null,
+                shareIt: null,
+            }),
+        },
 
         isActive: { type: Boolean, default: true },
 
@@ -66,6 +76,10 @@ const ProductSchema = new Schema(
             shareIt: { type: Number },
         },
 
+        snoozedFrom: {
+            type: Date,
+            default: null,
+        },
         snoozedUntil: {
             type: Date,
             default: null,

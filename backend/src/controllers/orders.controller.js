@@ -23,22 +23,57 @@ const TRANSITIONS = {
   cancelled       : [],
 };
 
-// ─── Shared price resolver for order items ────────────────────────────────────
-const resolveItemPrice = (product, variant, activeOffers) => {
-  const category = product.category;
-  const isSingle = category.productType === 'single';
+// ─── Shared price resolver for order items with minOrderAmount verification ──
+const calculateOrderPricing = (items, productMap, activeOffers) => {
+  const orderItems = [];
+  let subtotal = 0;
 
-  // For single products variant is always 'regular'
-  const v = isSingle ? 'regular' : variant;
+  for (const item of items) {
+    const product = productMap[item.productId];
+    if (!product || !product.isActive) {
+      throw new APIError(400, `Product ${item.productId} not found`);
+    }
+    if (!isVariantAvailable(product, item.variant)) {
+      throw new APIError(400, `${product.name} (${item.variant}) is not available`);
+    }
 
-  const base = product.priceOverride?.[v] ?? category.basePrice[v] ?? 0;
+    const isSingle = product.category.productType === 'single';
+    const v = isSingle ? 'regular' : item.variant;
+    const base = product.priceOverride?.[v] ?? product.category.basePrice[v] ?? 0;
 
-  const offer = activeOffers.find(o =>
-    !o.category ||
-    o.category.toString() === category._id.toString()
-  );
+    orderItems.push({
+      product: product._id,
+      productName: product.name,
+      variant: isSingle ? 'single' : v,
+      isZeroSugar: product.isZeroSugar,
+      quantity: item.quantity,
+      unitPrice: base,
+      totalPrice: base * item.quantity,
+      categoryId: product.category._id.toString(),
+    });
 
-  return offer ? Math.round(base * (1 - offer.discountPercent / 100)) : base;
+    subtotal += base * item.quantity;
+  }
+
+  let totalDiscount = 0;
+  for (const offer of activeOffers) {
+    const targetCatId = offer.category ? (offer.category._id || offer.category).toString() : null;
+    const qualifyingItems = targetCatId
+      ? orderItems.filter(it => it.categoryId === targetCatId)
+      : orderItems;
+
+    const catSubtotal = qualifyingItems.reduce((acc, it) => acc + it.totalPrice, 0);
+    const minReq = offer.minOrderAmount || 0;
+
+    if (catSubtotal > 0 && catSubtotal >= minReq) {
+      const disc = Math.round(catSubtotal * (offer.discountPercent / 100));
+      if (disc > totalDiscount) {
+        totalDiscount = disc;
+      }
+    }
+  }
+
+  return { orderItems, subtotal, discount: totalDiscount };
 };
 
 // ─── Check if variant is available ───────────────────────────────────────────
@@ -62,7 +97,6 @@ const fetchProductsMap = async (items) => {
 // ─── POST /api/orders/initiate ────────────────────────────────────────────────
 const initiateOrder = asyncHandler(async (req, res) => {
   const { items, paymentMethod } = req.body;
-  console.log("Initate hit")
 
   if (!items || items.length === 0) throw new APIError(400, 'Order must have at least one item');
   if (!paymentMethod || !['online', 'cod'].includes(paymentMethod)) {
@@ -71,34 +105,14 @@ const initiateOrder = asyncHandler(async (req, res) => {
 
   const now          = new Date();
   const activeOffers = await Offer.find({ isActive:true, startsAt:{$lte:now}, expiresAt:{$gte:now} });
-  const productMap   = await fetchProductsMap(items); // ← single DB query
+  const productMap   = await fetchProductsMap(items);
 
-  let subtotal = 0;
-  let discount = 0;
+  const { subtotal, discount } = calculateOrderPricing(items, productMap, activeOffers);
 
-  for (const item of items) {
-    const product = productMap[item.productId];
-    if (!product || !product.isActive) {
-      throw new APIError(400, `Product ${item.productId} not found`);
-    }
-    if (!isVariantAvailable(product, item.variant)) {
-      throw new APIError(400, `${product.name} (${item.variant}) is not available`);
-    }
-
-    console.log(items,paymentMethod)
-
-    const isSingle = product.category.productType === 'single';
-    const v        = isSingle ? 'regular' : item.variant;
-    const base     = product.priceOverride?.[v] ?? product.category.basePrice[v] ?? 0;
-    const unitPrice = resolveItemPrice(product, v, activeOffers);
-
-    subtotal += base * item.quantity;
-    discount += (base - unitPrice) * item.quantity;
-  }
-
-  const deliveryCharge = 20;
-  const codCharge      = paymentMethod === 'cod' ? 10 : 0;
-  const total          = (subtotal - discount) + deliveryCharge + codCharge;
+  const deliveryCharge = paymentMethod === 'cod' ? (subtotal > 599 ? 0 : 20) : 0;
+  const packagingFee   = subtotal > 0 ? 5 : 0;
+  const codCharge      = 0;
+  const total          = Math.max(0, subtotal - discount) + deliveryCharge + packagingFee;
 
   // COD or no Razorpay — skip payment gateway
   if (!razorpay || paymentMethod === 'cod') {
@@ -108,7 +122,7 @@ const initiateOrder = asyncHandler(async (req, res) => {
       currency       : 'INR',
       key            : null,
       paymentMethod,
-      breakdown      : { subtotal, discountAmount:discount, deliveryCharge, codCharge, total },
+      breakdown      : { subtotal, discountAmount: discount, deliveryCharge, packagingFee, codCharge, total },
     }, 'Order initiated'));
   }
 
@@ -124,7 +138,7 @@ const initiateOrder = asyncHandler(async (req, res) => {
     currency       : 'INR',
     key            : process.env.RAZORPAY_KEY_ID,
     paymentMethod,
-    breakdown      : { subtotal, discountAmount:discount, deliveryCharge, codCharge, total },
+    breakdown      : { subtotal, discountAmount: discount, deliveryCharge, packagingFee, codCharge, total },
   }, 'Order initiated'));
 });
 
@@ -153,52 +167,49 @@ const confirmOrder = asyncHandler(async (req, res) => {
   const activeOffers = await Offer.find({ isActive:true, startsAt:{$lte:now}, expiresAt:{$gte:now} });
   const productMap   = await fetchProductsMap(items); 
 
-  const orderItems = [];
-  let subtotal     = 0;
-  let discount     = 0;
+  const { orderItems, subtotal, discount } = calculateOrderPricing(items, productMap, activeOffers);
 
-  for (const item of items) {
-    const product = productMap[item.productId];
-    if (!product || !product.isActive) {
-      throw new APIError(400, `Product ${item.productId} no longer available`);
-    }
-
-    const isSingle  = product.category.productType === 'single';
-    const v         = isSingle ? 'regular' : item.variant;
-    const base      = product.priceOverride?.[v] ?? product.category.basePrice[v] ?? 0;
-    const unitPrice = resolveItemPrice(product, v, activeOffers);
-
-    orderItems.push({
-      product    : product._id,
-      productName: product.name,
-      variant    : isSingle ? 'single' : v,
-      isZeroSugar: product.isZeroSugar,
-      quantity   : item.quantity,
-      unitPrice,
-      totalPrice : unitPrice * item.quantity,
-    });
-
-    subtotal += base * item.quantity;
-    discount += (base - unitPrice) * item.quantity;
-  }
-
-  const deliveryCharge = 20;
-  const codCharge      = paymentMethod === 'cod' ? 10 : 0;
-  const total          = (subtotal - discount) + deliveryCharge + codCharge;
+  const deliveryCharge = paymentMethod === 'cod' ? (subtotal > 599 ? 0 : 20) : 0;
+  const packagingFee   = subtotal > 0 ? 5 : 0;
+  const codCharge      = 0;
+  const total          = Math.max(0, subtotal - discount) + deliveryCharge + packagingFee;
 
   // Generate human-readable order number — ORD-001
   const orderNumber = await generateOrderNumber();
+
+  const parsedLocation =
+    deliveryLocation &&
+    typeof deliveryLocation === 'object' &&
+    deliveryLocation.lat !== undefined &&
+    deliveryLocation.lng !== undefined
+      ? { lat: Number(deliveryLocation.lat), lng: Number(deliveryLocation.lng) }
+      : null;
+
+  let googleMapsUrl = '';
+  if (parsedLocation && parsedLocation.lat && parsedLocation.lng) {
+    googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${parsedLocation.lat},${parsedLocation.lng}`;
+  } else if (deliveryAddress) {
+    const queryAddress = deliveryAddress.toLowerCase().includes('mandya')
+      ? deliveryAddress
+      : `${deliveryAddress}, Mandya, Karnataka`;
+    googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryAddress)}`;
+  }
 
   const order = await Order.create({
     orderNumber,
     customer: req.user._id,
     items   : orderItems,
     status  : 'placed',
-    delivery: { address:deliveryAddress, phone:deliveryPhone, location:deliveryLocation },
-    pricing : { subtotal, discountAmount:discount, deliveryCharge, codCharge, total },
+    delivery: {
+      address      : deliveryAddress,
+      phone        : deliveryPhone,
+      ...(parsedLocation ? { location: parsedLocation } : {}),
+      googleMapsUrl,
+    },
+    pricing : { subtotal, discountAmount: discount, deliveryCharge, packagingFee, codCharge, total },
     payment : {
-      razorpayOrderId  : razorpayOrderId   || null,
-      razorpayPaymentId: razorpayPaymentId || null,
+      ...(razorpayOrderId ? { razorpayOrderId } : {}),
+      ...(razorpayPaymentId ? { razorpayPaymentId } : {}),
       method           : paymentMethod,
       status           : paymentMethod === 'cod' ? 'pending' : 'paid',
       paidAt           : paymentMethod === 'online' ? new Date() : null,
@@ -350,18 +361,24 @@ const getMonthlyReport = asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) throw new APIError(400, 'from and to dates are required');
 
+  const startDate = new Date(from);
+  startDate.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(to);
+  endDate.setHours(23, 59, 59, 999);
+
   const orders = await Order.find({
     status   : 'delivered',
-    createdAt: { $gte: new Date(from), $lte: new Date(to) },
-  }).populate('customer', 'name phone');
+    createdAt: { $gte: startDate, $lte: endDate },
+  }).populate('customer', 'name phone').sort({ createdAt: -1 });
 
-  const totalRevenue = orders.reduce((s, o) => s + o.pricing.total, 0);
+  const totalRevenue = orders.reduce((s, o) => s + (o.pricing?.total ?? o.totalAmount ?? 0), 0);
   const totalOrders  = orders.length;
   const avgOrder     = totalOrders ? Math.round(totalRevenue / totalOrders) : 0;
 
   const productMap = {};
   orders.forEach(order => {
-    order.items.forEach(item => {
+    (order.items || []).forEach(item => {
       if (!productMap[item.productName]) productMap[item.productName] = { totalSold:0, revenue:0 };
       productMap[item.productName].totalSold += item.quantity;
       productMap[item.productName].revenue   += item.totalPrice;

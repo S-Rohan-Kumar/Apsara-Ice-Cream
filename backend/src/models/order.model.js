@@ -20,7 +20,7 @@ export const generateOrderNumber = async () => {
   const counter = await OrderCounter.findOneAndUpdate(
     { financialYear: fy },
     { $inc: { lastNumber: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
   const num = counter.lastNumber.toString().padStart(3, '0');
   return `ORD-${num}`;
@@ -58,17 +58,19 @@ const OrderSchema = new Schema({
       lat: { type: Number },
       lng: { type: Number },
     },
+    googleMapsUrl: { type: String },
   },
   pricing: {
     subtotal      : { type: Number, required: true },
     discountAmount: { type: Number, default: 0 },
-    deliveryCharge: { type: Number, default: 20 },
+    deliveryCharge: { type: Number, default: 0 },
+    packagingFee  : { type: Number, default: 5 },
     codCharge     : { type: Number, default: 0 },
     total         : { type: Number, required: true },
   },
   payment: {
-    razorpayOrderId  : { type: String, default: null },
-    razorpayPaymentId: { type: String, default: null },
+    razorpayOrderId  : { type: String },
+    razorpayPaymentId: { type: String },
     method           : { type: String, enum: ['online', 'cod'], required: true },
     status           : { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
     paidAt           : { type: Date },

@@ -39,3 +39,7 @@ export const emitNewOrder = (order) => {
 export const emitStatusUpdate = (orderId,status) => {
     if(io) io.to(`order_${orderId}`).emit("status_update", status);
 }
+
+export const emitBroadcast = (broadcastData) => {
+    if (io) io.emit("broadcast_message", broadcastData);
+}

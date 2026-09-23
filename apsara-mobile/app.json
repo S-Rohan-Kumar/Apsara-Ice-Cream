@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Apsara Ice Cream",
+    "slug": "apsara-ice-cream",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "primaryColor": "#1B5E4B",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1B5E4B",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}

@@ -21,7 +21,9 @@ const getVariants = (category) => {
 
 // ─── Pricing helper ───────────────────────────────────────────────────────────
 const resolvePrice = (product, category, activeOffers) => {
-    if (!category || !category.basePrice) return {};
+    if (!category || !category.basePrice) {
+        return { basePrices: {}, resolvedPrices: {}, appliedOffer: null };
+    }
 
     const variants = getVariants(category);
 
@@ -30,18 +32,48 @@ const resolvePrice = (product, category, activeOffers) => {
         base[v] = product.priceOverride?.[v] ?? category.basePrice[v] ?? 0;
     });
 
+    const categoryIdStr = category._id
+        ? category._id.toString()
+        : category.toString();
     const offer = activeOffers.find(
-        (o) => !o.category || o.category.toString() === category._id.toString(),
+        (o) =>
+            !o.category ||
+            (o.category._id
+                ? o.category._id.toString()
+                : o.category.toString()) === categoryIdStr,
     );
 
-    if (!offer) return base;
+    if (!offer) {
+        return { basePrices: base, resolvedPrices: base, appliedOffer: null };
+    }
 
     const disc = offer.discountPercent / 100;
     const discounted = {};
     variants.forEach((v) => {
         discounted[v] = Math.round(base[v] * (1 - disc));
     });
-    return discounted;
+
+    return {
+        basePrices: base,
+        resolvedPrices: discounted,
+        appliedOffer: {
+            _id: offer._id,
+            title: offer.title,
+            discountPercent: offer.discountPercent,
+            minOrderAmount: offer.minOrderAmount || 0,
+            category: offer.category,
+            expiresAt: offer.expiresAt,
+        },
+    };
+};
+
+const isSnoozedActive = (from, until) => {
+    if (!until) return false;
+    const now = new Date();
+    const u = new Date(until);
+    const f = from ? new Date(from) : null;
+    if (f && now < f) return false;
+    return now <= u;
 };
 
 // ─── GET /api/products —
@@ -68,7 +100,10 @@ const getProducts = asyncHandler(async (req, res) => {
 
     const data = products.map((prod) => {
         const p = prod.toObject();
-        p.resolvedPrices = resolvePrice(prod, prod.category, activeOffers);
+        const priceInfo = resolvePrice(prod, prod.category, activeOffers);
+        p.basePrices = priceInfo.basePrices;
+        p.resolvedPrices = priceInfo.resolvedPrices;
+        p.appliedOffer = priceInfo.appliedOffer;
         p.availableVariants = getAvailableVariants(prod);
         return p;
     });
@@ -99,7 +134,10 @@ const getAllProducts = asyncHandler(async (req, res) => {
 
     const data = products.map((prod) => {
         const p = prod.toObject();
-        p.resolvedPrices = resolvePrice(prod, prod.category, activeOffers);
+        const priceInfo = resolvePrice(prod, prod.category, activeOffers);
+        p.basePrices = priceInfo.basePrices;
+        p.resolvedPrices = priceInfo.resolvedPrices;
+        p.appliedOffer = priceInfo.appliedOffer;
         p.availableVariants = getAvailableVariants(prod);
         return p;
     });
@@ -109,14 +147,22 @@ const getAllProducts = asyncHandler(async (req, res) => {
 
 const getAvailableVariants = (product) => {
     if (product.category?.productType !== "icecream") {
-        return product.isAvailable ? ["single"] : [];
+        const snoozed = isSnoozedActive(
+            product.snoozedFrom,
+            product.snoozedUntil,
+        );
+        return !snoozed && product.isAvailable ? ["single"] : [];
     }
     const variants = getVariants(product.category);
     const available = {};
-    const now = new Date();
     variants.forEach((v) => {
-        const isSnoozed = product.variantSnoozedUntil?.[v] && new Date(product.variantSnoozedUntil[v]) > now;
-        available[v] = isSnoozed ? false : (product.variantAvailability?.[v] ?? true);
+        const snoozed = isSnoozedActive(
+            product.variantSnoozedFrom?.[v],
+            product.variantSnoozedUntil?.[v],
+        );
+        available[v] = snoozed
+            ? false
+            : (product.variantAvailability?.[v] ?? true);
     });
     return available;
 };
@@ -139,7 +185,10 @@ const getProductDetails = asyncHandler(async (req, res) => {
     });
 
     const data = product.toObject();
-    data.resolvedPrices = resolvePrice(product, product.category, activeOffers);
+    const priceInfo = resolvePrice(product, product.category, activeOffers);
+    data.basePrices = priceInfo.basePrices;
+    data.resolvedPrices = priceInfo.resolvedPrices;
+    data.appliedOffer = priceInfo.appliedOffer;
     data.availableVariants = getAvailableVariants(product);
 
     return res.status(200).json(new APIResponse(200, data, "Product fetched"));
@@ -315,7 +364,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 
 // ─── PATCH /api/products/:id/snooze ───────────────────────────────────────────
 const snoozeProduct = asyncHandler(async (req, res) => {
-    const { hours, variant } = req.body;
+    const { hours, variant, startsAt, expiresAt } = req.body;
 
     const product = await Product.findById(req.params.id);
     if (!product || !product.isActive) {
@@ -323,6 +372,21 @@ const snoozeProduct = asyncHandler(async (req, res) => {
     }
 
     const durationHours = parseFloat(hours);
+    const now = new Date();
+
+    let snoozedFrom = startsAt ? new Date(startsAt) : now;
+    let snoozedUntil = null;
+    let delayMs = 0;
+
+    if (expiresAt) {
+        snoozedUntil = new Date(expiresAt);
+        delayMs = snoozedUntil.getTime() - Date.now();
+        if (delayMs <= 0)
+            throw new APIError(400, "Expiry time must be in the future");
+    } else if (durationHours > 0) {
+        delayMs = durationHours * 60 * 60 * 1000;
+        snoozedUntil = new Date(Date.now() + delayMs);
+    }
 
     if (variant) {
         const validVariants = ["small", "regular", "large", "binge", "shareIt"];
@@ -331,19 +395,30 @@ const snoozeProduct = asyncHandler(async (req, res) => {
         }
 
         if (!product.variantAvailability) {
-            product.variantAvailability = { small: true, regular: true, large: true, binge: true, shareIt: true };
+            product.variantAvailability = {
+                small: true,
+                regular: true,
+                large: true,
+                binge: true,
+                shareIt: true,
+            };
         }
         if (!product.variantSnoozedUntil) {
             product.variantSnoozedUntil = {};
         }
+        if (!product.variantSnoozedFrom) {
+            product.variantSnoozedFrom = {};
+        }
 
-        if (durationHours > 0) {
-            const delayMs = durationHours * 60 * 60 * 1000;
-            const snoozedUntil = new Date(Date.now() + delayMs);
-
-            product.variantAvailability[variant] = false;
+        if (snoozedUntil) {
+            product.variantSnoozedFrom[variant] = snoozedFrom;
             product.variantSnoozedUntil[variant] = snoozedUntil;
-            product.isAvailable = Object.values(product.variantAvailability).some(Boolean);
+            if (snoozedFrom <= now) {
+                product.variantAvailability[variant] = false;
+            }
+            product.isAvailable = Object.values(
+                product.variantAvailability,
+            ).some(Boolean);
             await product.save();
 
             await scheduleProductReEnable(product._id, delayMs, variant);
@@ -355,16 +430,20 @@ const snoozeProduct = asyncHandler(async (req, res) => {
                     {
                         variant,
                         variantAvailability: product.variantAvailability,
+                        variantSnoozedFrom: product.variantSnoozedFrom,
                         variantSnoozedUntil: product.variantSnoozedUntil,
                         isAvailable: product.isAvailable,
                     },
-                    `${variant} snoozed for ${durationHours} hours`,
+                    `${variant} snoozed until ${snoozedUntil.toLocaleString()}`,
                 ),
             );
         } else if (durationHours === -1 || hours === "indefinite") {
             product.variantAvailability[variant] = false;
             product.variantSnoozedUntil[variant] = null;
-            product.isAvailable = Object.values(product.variantAvailability).some(Boolean);
+            product.variantSnoozedFrom[variant] = null;
+            product.isAvailable = Object.values(
+                product.variantAvailability,
+            ).some(Boolean);
             await product.save();
 
             await cancelProductReEnable(product._id, variant);
@@ -376,6 +455,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
                     {
                         variant,
                         variantAvailability: product.variantAvailability,
+                        variantSnoozedFrom: product.variantSnoozedFrom,
                         variantSnoozedUntil: product.variantSnoozedUntil,
                         isAvailable: product.isAvailable,
                     },
@@ -385,6 +465,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
         } else {
             product.variantAvailability[variant] = true;
             product.variantSnoozedUntil[variant] = null;
+            product.variantSnoozedFrom[variant] = null;
             product.isAvailable = true;
             await product.save();
 
@@ -397,6 +478,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
                     {
                         variant,
                         variantAvailability: product.variantAvailability,
+                        variantSnoozedFrom: product.variantSnoozedFrom,
                         variantSnoozedUntil: product.variantSnoozedUntil,
                         isAvailable: product.isAvailable,
                     },
@@ -406,55 +488,59 @@ const snoozeProduct = asyncHandler(async (req, res) => {
         }
     }
 
-    if (durationHours > 0) {
-        const delayMs = durationHours * 60 * 60 * 1000;
-        const snoozedUntil = new Date(Date.now() + delayMs);
-
-        product.isAvailable = false;
+    if (snoozedUntil) {
+        product.snoozedFrom = snoozedFrom;
         product.snoozedUntil = snoozedUntil;
+        if (snoozedFrom <= now) {
+            product.isAvailable = false;
+        }
         await product.save();
 
         await scheduleProductReEnable(product._id, delayMs);
         await invalidate("products", "products_all");
 
-        return res
-            .status(200)
-            .json(
-                new APIResponse(
-                    200,
-                    {
-                        isAvailable: product.isAvailable,
-                        snoozedUntil: product.snoozedUntil,
-                    },
-                    `Product snoozed for ${durationHours} hours`,
-                ),
-            );
+        return res.status(200).json(
+            new APIResponse(
+                200,
+                {
+                    isAvailable: product.isAvailable,
+                    snoozedFrom: product.snoozedFrom,
+                    snoozedUntil: product.snoozedUntil,
+                },
+                `Product snoozed until ${snoozedUntil.toLocaleString()}`,
+            ),
+        );
     } else if (durationHours === -1 || hours === "indefinite") {
         product.isAvailable = false;
+        product.snoozedFrom = null;
         product.snoozedUntil = null;
         await product.save();
 
         await cancelProductReEnable(product._id);
         await invalidate("products", "products_all");
 
-        return res
-            .status(200)
-            .json(
-                new APIResponse(
-                    200,
-                    { isAvailable: false, snoozedUntil: null },
-                    "Product turned off until marked on",
-                ),
-            );
+        return res.status(200).json(
+            new APIResponse(
+                200,
+                {
+                    isAvailable: false,
+                    snoozedFrom: null,
+                    snoozedUntil: null,
+                },
+                "Product turned off until marked on",
+            ),
+        );
     } else {
         product.isAvailable = true;
+        product.snoozedFrom = null;
         product.snoozedUntil = null;
         if (product.variantAvailability) {
             product.variantAvailability.small = true;
             product.variantAvailability.regular = true;
             product.variantAvailability.large = true;
             product.variantAvailability.binge = true;
-            if (product.category?.hasShareIt) product.variantAvailability.shareIt = true;
+            if (product.category?.hasShareIt)
+                product.variantAvailability.shareIt = true;
         }
         if (product.variantSnoozedUntil) {
             product.variantSnoozedUntil.small = null;
@@ -463,20 +549,29 @@ const snoozeProduct = asyncHandler(async (req, res) => {
             product.variantSnoozedUntil.binge = null;
             product.variantSnoozedUntil.shareIt = null;
         }
+        if (product.variantSnoozedFrom) {
+            product.variantSnoozedFrom.small = null;
+            product.variantSnoozedFrom.regular = null;
+            product.variantSnoozedFrom.large = null;
+            product.variantSnoozedFrom.binge = null;
+            product.variantSnoozedFrom.shareIt = null;
+        }
         await product.save();
 
         await cancelProductReEnable(product._id);
         await invalidate("products", "products_all");
 
-        return res
-            .status(200)
-            .json(
-                new APIResponse(
-                    200,
-                    { isAvailable: product.isAvailable, snoozedUntil: null },
-                    "Product re-enabled and now active",
-                ),
-            );
+        return res.status(200).json(
+            new APIResponse(
+                200,
+                {
+                    isAvailable: product.isAvailable,
+                    snoozedFrom: null,
+                    snoozedUntil: null,
+                },
+                "Product re-enabled and now active",
+            ),
+        );
     }
 });
 

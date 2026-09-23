@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/user.model.js";
 import { redis } from "../utils/redis.js";
 
-const SESSION_TTL = 60 * 60 * 8;
+const SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
 
 const authMiddleware = async (req, res, next) => {
     try {

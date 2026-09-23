@@ -112,8 +112,13 @@ export default function OrderDetailPage() {
                   </div>
                 )}
                 <div className='flex justify-between text-[11px] font-bold text-slate-400 uppercase'>
-                  <span>🛵 Logistics</span><span>{currency(order.pricing.deliveryCharge)}</span>
+                  <span>🛵 Logistics</span><span>{order.pricing.deliveryCharge === 0 ? 'FREE' : currency(order.pricing.deliveryCharge)}</span>
                 </div>
+                {(order.pricing.packagingFee !== undefined ? order.pricing.packagingFee > 0 : true) && (
+                  <div className='flex justify-between text-[11px] font-bold text-slate-400 uppercase'>
+                    <span>❄️ Insulated Packaging</span><span>{currency(order.pricing.packagingFee ?? 5)}</span>
+                  </div>
+                )}
                 <div className='flex justify-between items-center pt-4 border-t border-emerald-100'>
                   <span className='text-[11px] font-black text-[#1B4332] uppercase tracking-widest'>Total Amount</span>
                   <span className='text-xl sm:text-2xl font-black text-[#1B4332]'>{currency(order.pricing.total)}</span>
@@ -138,6 +143,31 @@ export default function OrderDetailPage() {
                   <p className='text-xs font-bold text-slate-700 leading-relaxed'>{row.val}</p>
                 </div>
               ))}
+
+              <div className='flex flex-col gap-2 pt-2'>
+                {order.delivery?.googleMapsUrl && (
+                  <a
+                    href={order.delivery.googleMapsUrl}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all border border-emerald-200 shadow-sm'
+                  >
+                    <span>🗺️ Open in Google Maps</span>
+                  </a>
+                )}
+
+                {order.customer?.phone && (
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(`Apsara Ice Cream Order #${order.orderNumber || order._id.slice(-4).toUpperCase()}\nCustomer: ${order.customer?.name || 'Guest'} (${order.customer?.phone})\nAddress: ${order.delivery?.address || ''}\nMaps: ${order.delivery?.googleMapsUrl || ''}\nAmount: ₹${order.pricing?.total || 0} (${order.payment?.method === 'cod' ? 'Cash on Delivery' : 'Paid Online'})`)}`}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-green-500 hover:bg-green-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all shadow-sm'
+                  >
+                    <span>📲 Share to Delivery Boy (WhatsApp)</span>
+                  </a>
+                )}
+              </div>
+
               <div className={`inline-block px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest
                 ${order.payment?.method === 'cod' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
                 {order.payment?.method === 'cod' ? '💵 Cash on Delivery' : '💳 Online Paid'}
