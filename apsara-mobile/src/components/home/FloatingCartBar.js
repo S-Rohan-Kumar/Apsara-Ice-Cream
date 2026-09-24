@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
@@ -11,30 +11,48 @@ const STATUS_TEXT = {
 };
 
 export default function FloatingCartBar({ onPress, onTrackOrder, onDismiss }) {
-  const { itemCount, grandTotal, items, activeOrder } = useCart();
+  const { itemCount, grandTotal, items, activeOrder, activeOrders = [] } = useCart();
+  const [selectedOrderIndex, setSelectedOrderIndex] = useState(0);
 
-  const isOrderActive = activeOrder && ['placed', 'preparing', 'out_for_delivery'].includes(activeOrder.status);
+  const displayOrders = activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []);
+  const validActiveOrders = displayOrders.filter(
+    (o) => o && ['placed', 'preparing', 'out_for_delivery'].includes(o.status)
+  );
+
+  const isOrderActive = validActiveOrders.length > 0;
 
   if (isOrderActive) {
-    const statusSubtitle = STATUS_TEXT[activeOrder.status] || 'Processing order';
+    const ordersCount = validActiveOrders.length;
+    const safeIndex = selectedOrderIndex < ordersCount ? selectedOrderIndex : 0;
+    const currentOrder = validActiveOrders[safeIndex] || validActiveOrders[0];
+    const statusSubtitle = STATUS_TEXT[currentOrder.status] || 'Processing order';
+
+    const handleCycleOrder = () => {
+      if (ordersCount > 1) {
+        setSelectedOrderIndex((prev) => (prev + 1) % ordersCount);
+      }
+    };
 
     const handleTrackPress = () => {
       if (onTrackOrder) {
-        onTrackOrder(activeOrder);
+        onTrackOrder(currentOrder);
       }
     };
 
     return (
       <View style={styles.container}>
+        {ordersCount >= 3 && <View style={styles.stackLayer2} />}
+        {ordersCount >= 2 && <View style={styles.stackLayer1} />}
+
         <View style={[styles.card, styles.orderCard]}>
           <TouchableOpacity
             style={styles.leftSection}
-            onPress={handleTrackPress}
+            onPress={ordersCount > 1 ? handleCycleOrder : handleTrackPress}
             activeOpacity={0.85}
           >
             <View style={styles.pulseIconContainer}>
               <Ionicons
-                name={activeOrder.status === 'out_for_delivery' ? 'bicycle' : 'snow'}
+                name={currentOrder.status === 'out_for_delivery' ? 'bicycle' : 'snow'}
                 size={20}
                 color={colors.primary}
               />
@@ -43,13 +61,21 @@ export default function FloatingCartBar({ onPress, onTrackOrder, onDismiss }) {
 
             <View style={styles.storeInfo}>
               <View style={styles.orderTitleRow}>
-                <Text style={styles.orderTitle}>Order in Progress</Text>
+                <Text style={styles.orderTitle}>
+                  {ordersCount > 1 ? `Order #${currentOrder.orderNumber}` : 'Order in Progress'}
+                </Text>
                 <View style={styles.liveTag}>
                   <Text style={styles.liveTagText}>LIVE</Text>
                 </View>
+                {ordersCount > 1 && (
+                  <View style={styles.stackBadge}>
+                    <Ionicons name="copy-outline" size={10} color="#1E40AF" />
+                    <Text style={styles.stackBadgeText}>{ordersCount} Orders</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.orderSubtitle} numberOfLines={1}>
-                {statusSubtitle}
+                {ordersCount > 1 ? `${statusSubtitle} • Tap to switch` : statusSubtitle}
               </Text>
             </View>
           </TouchableOpacity>
@@ -140,6 +166,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
+    zIndex: 10,
+  },
+  stackLayer2: {
+    position: 'absolute',
+    top: -10,
+    left: 20,
+    right: 20,
+    height: 20,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    zIndex: 1,
+    elevation: 2,
+  },
+  stackLayer1: {
+    position: 'absolute',
+    top: -5,
+    left: 10,
+    right: 10,
+    height: 18,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    zIndex: 2,
+    elevation: 4,
   },
   orderCard: {
     borderLeftWidth: 4,
@@ -188,6 +241,20 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.white,
     letterSpacing: 0.5,
+  },
+  stackBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    gap: 3,
+  },
+  stackBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#1E40AF',
   },
   orderSubtitle: {
     fontSize: 11,

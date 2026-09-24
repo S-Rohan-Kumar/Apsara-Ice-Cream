@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getBaseUrl = () => {
   if (Platform.OS === 'web') {
-    return 'https://apsara-ice-cream-cj1s.onrender.com/api';
+    return 'http://localhost:8000/api';
   }
   return 'http://192.168.1.4:8000/api';
 };

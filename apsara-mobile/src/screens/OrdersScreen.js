@@ -29,7 +29,7 @@ export default function OrdersScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
-  const { addToCart } = useCart();
+  const { addToCart, syncActiveOrders } = useCart();
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,13 +44,15 @@ export default function OrdersScreen() {
 
     try {
       const res = await api.get('/orders/my');
-      setOrders(res.data?.data?.orders || res.data?.data || []);
+      const orderList = res.data?.data?.orders || res.data?.data || [];
+      setOrders(orderList);
+      syncActiveOrders(orderList);
     } catch (e) {
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, syncActiveOrders]);
 
   useEffect(() => {
     fetchOrders();

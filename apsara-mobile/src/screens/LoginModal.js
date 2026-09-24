@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -126,7 +127,11 @@ export default function LoginModal() {
 
       <View style={styles.content}>
         <View style={styles.brandIconContainer}>
-          <Text style={styles.brandEmoji}>🍦</Text>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.brandLogo}
+            resizeMode="contain"
+          />
         </View>
 
         <Text style={styles.title}>
@@ -293,17 +298,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandIconContainer: {
-    width: 64,
-    height: 64,
+    width: 76,
+    height: 76,
     borderRadius: radius.full,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.xl,
     marginBottom: spacing.md,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  brandEmoji: {
-    fontSize: 34,
+  brandLogo: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
   },
   title: {
     fontSize: fontSize.xl,

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Outlet }    from 'react-router-dom';
-import Sidebar        from './Sidebar';
-import Topbar         from './Topbar';
-import { useSocket }  from '../../hooks/useSocket';
+import { Outlet } from 'react-router-dom';
+import Sidebar from './Sidebar';
+import Topbar from './Topbar';
+import { useSocket } from '../../hooks/useSocket';
+import OrderNotificationDrawer from '../common/OrderNotificationDrawer';
 
 export default function AppLayout() {
   useSocket();
@@ -10,7 +11,8 @@ export default function AppLayout() {
 
   return (
     <div className='flex h-screen bg-[#FBFCFB] font-sans text-slate-800'>
-      {/* Mobile sidebar overlay */}
+      <OrderNotificationDrawer />
+
       {sidebarOpen && (
         <div
           className='fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden'
@@ -18,7 +20,6 @@ export default function AppLayout() {
         />
       )}
 
-      {/* Sidebar */}
       <div className={`
         fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 lg:z-auto
         transition-transform duration-300 ease-in-out

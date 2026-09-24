@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 const getSocketUrl = () => {
   if (Platform.OS === 'web') {
-    return 'https://apsara-ice-cream-cj1s.onrender.com';
+    return 'http://localhost:8000';
   }
   return 'http://192.168.1.4:8000';
 };

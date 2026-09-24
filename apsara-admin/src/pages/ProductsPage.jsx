@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useGetCategoriesQuery } from '../slices/categoryApiSlice';
 import {
@@ -19,11 +19,11 @@ import Spinner from '../components/common/Spinner';
 const currency = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 const VARIANT_META = {
-  small  : { label:'Small',    ml:'80ml'  },
-  regular: { label:'Regular',  ml:'120ml' },
-  large  : { label:'Large',    ml:'160ml' },
-  binge  : { label:'Binge',    ml:'300ml' },
-  shareIt: { label:'Share-It', ml:'500ml' },
+  small: { label: 'Small', ml: '80ml' },
+  regular: { label: 'Regular', ml: '120ml' },
+  large: { label: 'Large', ml: '160ml' },
+  binge: { label: 'Binge', ml: '300ml' },
+  shareIt: { label: 'Share-It', ml: '500ml' },
 };
 
 const formatSnooze = (iso) => {
@@ -33,7 +33,7 @@ const formatSnooze = (iso) => {
   if (diffMs <= 0) return null;
   const hours = Math.floor(diffMs / (1000 * 60 * 60));
   if (hours > 24) {
-    return `till ${target.toLocaleDateString('en-IN', { day:'numeric', month:'short' })}`;
+    return `till ${target.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
   }
   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
   return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -44,13 +44,13 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
   const [snoozeProduct] = useSnoozeProductMutation();
   const { showSuccess, showError } = useToast();
 
-  const cat      = product.category;
-  const variants = ['small','regular','large','binge'];
+  const cat = product.category;
+  const variants = ['small', 'regular', 'large', 'binge'];
   if (cat?.hasShareIt) variants.push('shareIt');
 
   const [avail, setAvail] = useState(() => {
     const init = {};
-    variants.forEach(v => {
+    variants.forEach((v) => {
       const isSnoozed = product.variantSnoozedUntil?.[v] && new Date(product.variantSnoozedUntil[v]) > new Date();
       init[v] = isSnoozed ? false : (product.variantAvailability?.[v] ?? true);
     });
@@ -64,10 +64,10 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
       snoozeProduct({ id: product._id, variant: v, hours: 0 })
         .unwrap()
         .then(() => {
-          setAvail(prev => ({ ...prev, [v]: true }));
+          setAvail((prev) => ({ ...prev, [v]: true }));
           showSuccess(`${VARIANT_META[v]?.label || v} turned back on`);
         })
-        .catch(e => showError(e?.data?.message || 'Failed to update'));
+        .catch((e) => showError(e?.data?.message || 'Failed to update'));
     }
   };
 
@@ -76,14 +76,15 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
       await updateVariantAvailability({ id: product._id, ...avail }).unwrap();
       showSuccess('Availability updated');
       onClose();
-    } catch (e) { showError(e?.data?.message || 'Update failed'); }
+    } catch (e) {
+      showError(e?.data?.message || 'Update failed');
+    }
   };
 
   return (
-    <div className='fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center
-                    justify-center z-50 p-0 sm:p-4'>
-      <div className='bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-sm overflow-hidden'>
-        <div className='bg-[#1B5E4B] px-5 py-4 flex items-center justify-between'>
+    <div className='fixed inset-0 bg-[#1B4332]/30 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4'>
+      <div className='bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200'>
+        <div className='bg-[#1B4332] px-5 py-4 flex items-center justify-between'>
           <div>
             <h2 className='text-sm font-extrabold text-white truncate max-w-[200px]'>{product.name}</h2>
             <p className='text-white/60 text-xs mt-0.5'>Set availability per size</p>
@@ -92,8 +93,7 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
         </div>
 
         <div className='p-4'>
-          <div className='flex justify-between text-xs font-bold text-gray-400 uppercase
-                          tracking-wider px-3 mb-2'>
+          <div className='flex justify-between text-xs font-bold text-gray-400 uppercase tracking-wider px-3 mb-2'>
             <span>Size</span>
             <span>Available</span>
           </div>
@@ -102,29 +102,35 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
               const meta = VARIANT_META[v];
               const isSnoozed = product.variantSnoozedUntil?.[v] && new Date(product.variantSnoozedUntil[v]) > new Date();
               return (
-                <div key={v}
-                  className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all
-                    ${avail[v] ? 'bg-[#F7FBF9] border-[#1B5E4B]/20' : 'bg-gray-50 border-gray-100'}`}>
+                <div
+                  key={v}
+                  className={`flex items-center justify-between px-4 py-3 rounded-2xl border transition-all ${
+                    avail[v] ? 'bg-[#F2F7F2] border-emerald-200' : 'bg-gray-50 border-gray-100'
+                  }`}
+                >
                   <div>
                     <div className='flex items-center gap-1.5'>
-                      <p className='font-semibold text-gray-700 text-sm'>{meta.label}</p>
+                      <p className='font-bold text-gray-800 text-sm'>{meta.label}</p>
                       {isSnoozed && (
                         <span className='text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-bold'>
-                          ⏰ {formatSnooze(product.variantSnoozedUntil[v])}
+                          Snoozed ({formatSnooze(product.variantSnoozedUntil[v])})
                         </span>
                       )}
                     </div>
-                    <p className='text-xs text-gray-400'>{meta.ml}</p>
+                    <p className='text-xs text-gray-400 font-medium'>{meta.ml}</p>
                   </div>
                   <button
                     type='button'
                     onClick={() => handleToggleVariant(v)}
-                    className={`relative w-14 h-7 rounded-full transition-colors duration-200
-                      ${avail[v] ? 'bg-[#1B5E4B]' : 'bg-gray-300'}`}>
-                    <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow
-                                      transition-all duration-200 flex items-center justify-center
-                                      text-[9px] font-extrabold
-                      ${avail[v] ? 'left-8 text-[#1B5E4B]' : 'left-1 text-gray-400'}`}>
+                    className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${
+                      avail[v] ? 'bg-[#1B4332]' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all duration-200 flex items-center justify-center text-[9px] font-extrabold ${
+                        avail[v] ? 'left-8 text-[#1B4332]' : 'left-1 text-gray-400'
+                      }`}
+                    >
                       {avail[v] ? 'ON' : 'OFF'}
                     </span>
                   </button>
@@ -133,10 +139,9 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
             })}
           </div>
 
-          {Object.values(avail).every(v => !v) && (
-            <div className='mt-3 flex items-center gap-2 bg-red-50 border border-red-100
-                            text-red-500 text-xs font-semibold px-3 py-2 rounded-xl'>
-              ⚠️ Product will be hidden from customers — all variants off
+          {Object.values(avail).every((v) => !v) && (
+            <div className='mt-3 flex items-center gap-2 bg-rose-50 border border-rose-100 text-rose-600 text-xs font-semibold px-3 py-2 rounded-xl'>
+              Product will be hidden from customers — all variants off
             </div>
           )}
 
@@ -146,20 +151,23 @@ function VariantAvailabilityModal({ product, onClose, onSnooze }) {
               onClick={() => onSnooze?.(product, null)}
               className='w-full py-2.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs transition'
             >
-              ⏱️ Timed Off / Snooze Flavour
+              Timed Off / Snooze Flavour
             </button>
           </div>
         </div>
 
         <div className='flex gap-3 px-4 pb-4 sm:pb-4 pb-safe'>
-          <button onClick={onClose}
-            className='flex-1 border border-gray-200 py-3 rounded-xl font-semibold
-                       text-gray-500 hover:bg-gray-50 transition text-sm'>
+          <button
+            onClick={onClose}
+            className='flex-1 border border-gray-200 py-3 rounded-xl font-semibold text-gray-500 hover:bg-gray-50 transition text-sm'
+          >
             Cancel
           </button>
-          <button onClick={handleSave} disabled={isLoading}
-            className='flex-1 bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold
-                       py-3 rounded-xl transition shadow-md shadow-[#1B5E4B]/20 text-sm disabled:opacity-50'>
+          <button
+            onClick={handleSave}
+            disabled={isLoading}
+            className='flex-1 bg-[#1B4332] hover:bg-[#163829] text-white font-bold py-3 rounded-xl transition shadow-md shadow-emerald-900/15 text-sm disabled:opacity-50'
+          >
             {isLoading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
@@ -210,7 +218,7 @@ function SnoozeModal({ product, variant, onClose }) {
         expiresAt,
       }).unwrap();
       const targetName = variant ? `${VARIANT_META[variant]?.label || variant}` : 'Product';
-      showSuccess(`${targetName} snoozed until ${new Date(expiresAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' })}`);
+      showSuccess(`${targetName} snoozed until ${new Date(expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`);
       onClose();
     } catch (e) {
       showError(e?.data?.message || 'Failed to set date snooze');
@@ -227,9 +235,9 @@ function SnoozeModal({ product, variant, onClose }) {
   const titleLabel = variant ? `${product.name} (${VARIANT_META[variant]?.label || variant})` : product.name;
 
   return (
-    <div className='fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
+    <div className='fixed inset-0 bg-[#1B4332]/30 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
       <div className='bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200'>
-        <div className='bg-[#1B5E4B] px-5 py-4 flex items-center justify-between'>
+        <div className='bg-[#1B4332] px-5 py-4 flex items-center justify-between'>
           <div>
             <h2 className='text-sm font-extrabold text-white truncate max-w-[240px]'>{titleLabel}</h2>
             <p className='text-white/60 text-xs mt-0.5'>Stock Timer</p>
@@ -238,20 +246,24 @@ function SnoozeModal({ product, variant, onClose }) {
         </div>
 
         <div className='p-4 space-y-3'>
-          <div className='flex gap-1 p-1 bg-gray-100 rounded-xl'>
+          <div className='flex gap-1 p-1 bg-[#F2F7F2] rounded-xl'>
             <button
               type='button'
               onClick={() => setDateMode(false)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition ${!dateMode ? 'bg-white text-[#1B5E4B] shadow-sm' : 'text-gray-500'}`}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition ${
+                !dateMode ? 'bg-[#1B4332] text-white shadow-sm' : 'text-gray-500'
+              }`}
             >
-              ⚡ Quick Hours
+              Quick Hours
             </button>
             <button
               type='button'
               onClick={() => setDateMode(true)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition ${dateMode ? 'bg-white text-[#1B5E4B] shadow-sm' : 'text-gray-500'}`}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition ${
+                dateMode ? 'bg-[#1B4332] text-white shadow-sm' : 'text-gray-500'
+              }`}
             >
-              📅 Date to Date
+              Date to Date
             </button>
           </div>
 
@@ -260,7 +272,7 @@ function SnoozeModal({ product, variant, onClose }) {
               <p className='text-xs font-bold text-gray-400 uppercase tracking-wider px-1'>
                 {variant ? `Turn off ${VARIANT_META[variant]?.label || ''} for:` : 'Turn off for:'}
               </p>
-              
+
               <div className='grid grid-cols-2 gap-2'>
                 {[
                   { label: '2 Hours', hours: 2 },
@@ -272,9 +284,9 @@ function SnoozeModal({ product, variant, onClose }) {
                     key={hours}
                     disabled={isLoading}
                     onClick={() => handleSnooze(hours)}
-                    className='py-2.5 px-3 rounded-xl border border-gray-200 hover:border-[#1B5E4B] hover:bg-[#F7FBF9] text-gray-700 hover:text-[#1B5E4B] font-bold text-xs transition active:scale-95 disabled:opacity-50'
+                    className='py-2.5 px-3 rounded-xl border border-gray-200 hover:border-[#1B4332] hover:bg-[#F2F7F2] text-gray-700 hover:text-[#1B4332] font-bold text-xs transition active:scale-95 disabled:opacity-50'
                   >
-                    ⏱️ {label}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -282,9 +294,9 @@ function SnoozeModal({ product, variant, onClose }) {
               <button
                 disabled={isLoading}
                 onClick={() => handleSnooze(-1)}
-                className='w-full py-2.5 px-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs transition active:scale-95 disabled:opacity-50'
+                className='w-full py-2.5 px-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition active:scale-95 disabled:opacity-50'
               >
-                🛑 Until I mark it on
+                Until I mark it on
               </button>
             </>
           ) : (
@@ -295,7 +307,7 @@ function SnoozeModal({ product, variant, onClose }) {
                   type='datetime-local'
                   value={startsAt}
                   onChange={(e) => setStartsAt(e.target.value)}
-                  className='w-full bg-[#F7FBF9] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]'
+                  className='w-full bg-[#F2F7F2] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B4332]'
                   required
                 />
               </div>
@@ -305,14 +317,14 @@ function SnoozeModal({ product, variant, onClose }) {
                   type='datetime-local'
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
-                  className='w-full bg-[#F7FBF9] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]'
+                  className='w-full bg-[#F2F7F2] border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B4332]'
                   required
                 />
               </div>
               <button
                 type='submit'
                 disabled={isLoading}
-                className='w-full py-2.5 rounded-xl bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold text-xs shadow-md shadow-[#1B5E4B]/20 transition active:scale-95 disabled:opacity-50'
+                className='w-full py-2.5 rounded-xl bg-[#1B4332] hover:bg-[#163829] text-white font-bold text-xs shadow-md shadow-emerald-900/15 transition active:scale-95 disabled:opacity-50'
               >
                 {isLoading ? 'Saving...' : 'Apply Date Snooze'}
               </button>
@@ -325,7 +337,7 @@ function SnoozeModal({ product, variant, onClose }) {
               onClick={() => handleSnooze(0)}
               className='w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition active:scale-95 disabled:opacity-50'
             >
-              ✅ Turn On Now
+              Turn On Now
             </button>
           )}
 
@@ -341,22 +353,22 @@ function SnoozeModal({ product, variant, onClose }) {
   );
 }
 
-// ─── Main ProductsPage ────────────────────────────────────────────────────────
 export default function ProductsPage() {
   const [searchParams] = useSearchParams();
-  const navigate       = useNavigate();
-  const dispatch       = useDispatch();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { showSuccess, showError } = useToast();
 
-  const preselectedCat  = searchParams.get('category') || '';
+  const preselectedCat = searchParams.get('category') || '';
   const preselectedName = searchParams.get('name') || '';
 
   const [selectedCat, setSelectedCat] = useState(preselectedCat);
-  const [showModal,   setShowModal]   = useState(false);
-  const [editingId,   setEditingId]   = useState(null);
-  const [form, setForm] = useState({ name:'', category:'', isZeroSugar:false });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({ name: '', category: '', isZeroSugar: false });
   const [imageFile, setImageFile] = useState(null);
-  const [preview,   setPreview]   = useState('');
+  const [preview, setPreview] = useState('');
 
   const [variantModalProduct, setVariantModalProduct] = useState(null);
   const [snoozeModalData, setSnoozeModalData] = useState(null);
@@ -365,7 +377,7 @@ export default function ProductsPage() {
   const { data: products = [], isLoading } = useGetProductsQuery(
     { categoryId: selectedCat || undefined }
   );
-  const [toggleStock]   = useToggleStockMutation();
+  const [toggleStock] = useToggleStockMutation();
   const [deleteProduct] = useDeleteProductMutation();
   const [createProduct] = useCreateProductMutation();
   const [updateProduct] = useUpdateProductMutation();
@@ -385,18 +397,24 @@ export default function ProductsPage() {
   };
 
   const closeModal = () => {
-    setShowModal(false); setEditingId(null);
-    setForm({ name:'', category:'', isZeroSugar:false });
-    setImageFile(null); setPreview('');
+    setShowModal(false);
+    setEditingId(null);
+    setForm({ name: '', category: '', isZeroSugar: false });
+    setImageFile(null);
+    setPreview('');
   };
 
   const handleDelete = (id) => {
     const key = `del_${id}`;
     registerConfirmHandler(key, async () => {
-      try { await deleteProduct(id).unwrap(); showSuccess('Product deleted'); }
-      catch { showError('Delete failed'); }
+      try {
+        await deleteProduct(id).unwrap();
+        showSuccess('Product deleted');
+      } catch {
+        showError('Delete failed');
+      }
     });
-    dispatch(showConfirm({ message:'Delete this product?', confirmKey:key }));
+    dispatch(showConfirm({ message: 'Delete this product?', confirmKey: key }));
   };
 
   const handleSubmit = async (e) => {
@@ -407,297 +425,399 @@ export default function ProductsPage() {
     fd.append('isZeroSugar', form.isZeroSugar);
     if (imageFile) fd.append('image', imageFile);
     try {
-      if (editingId) { await updateProduct({ id:editingId, formData:fd }).unwrap(); showSuccess('Updated'); }
-      else           { await createProduct(fd).unwrap(); showSuccess('Created'); }
+      if (editingId) {
+        await updateProduct({ id: editingId, formData: fd }).unwrap();
+        showSuccess('Updated successfully');
+      } else {
+        await createProduct(fd).unwrap();
+        showSuccess('Product created successfully');
+      }
       closeModal();
-    } catch (e) { showError(e?.data?.message || 'Save failed'); }
+    } catch (e) {
+      showError(e?.data?.message || 'Save failed');
+    }
   };
 
-  const selectedCatObj = categories.find(c => c._id === selectedCat);
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const q = searchTerm.toLowerCase();
+    return products.filter((p) => (p.name || '').toLowerCase().includes(q));
+  }, [products, searchTerm]);
 
   return (
-    <div>
-      {/* Header */}
-      <div className='flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-5 sm:mb-6'>
-        <button onClick={() => navigate('/categories')}
-          className='text-[#1B5E4B] hover:text-[#164e3e] font-semibold text-sm
-                     flex items-center gap-1 hover:gap-2 transition-all self-start'>
-          ← Categories
-        </button>
-        <div className='flex-1'>
-          <h1 className='text-xl sm:text-2xl font-extrabold text-gray-800'>
-            {preselectedName || 'All Products'}
+    <div className='max-w-7xl mx-auto pb-24 px-4 sm:px-8'>
+      <div className='mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4'>
+        <div>
+          <div className='flex items-center gap-2 mb-2'>
+            <button
+              onClick={() => navigate('/categories')}
+              className='text-emerald-700 hover:text-emerald-900 font-bold text-xs flex items-center gap-1 transition'
+            >
+              ← Back to Categories
+            </button>
+            <span className='text-slate-300'>•</span>
+            <span className='px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800'>
+              Flavour Registry
+            </span>
+          </div>
+          <h1 className='text-3xl sm:text-4xl font-black text-[#1B4332] tracking-tight'>
+            {preselectedName ? `${preselectedName} Flavours` : 'Menu Catalog'}
           </h1>
-          <p className='text-sm text-gray-400 mt-0.5'>{products.length} products</p>
+          <p className='text-xs font-bold text-emerald-900/40 uppercase tracking-[2px] mt-1.5'>
+            {filteredProducts.length} items available in active view
+          </p>
         </div>
-        <button onClick={() => { setShowModal(true); setEditingId(null); }}
-          className='self-start sm:self-auto bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold px-4 sm:px-5 py-2 sm:py-2.5
-                     rounded-xl shadow-md shadow-[#1B5E4B]/20 transition-all text-sm whitespace-nowrap'>
-          + Add Product
+
+        <button
+          onClick={() => {
+            setShowModal(true);
+            setEditingId(null);
+          }}
+          className='self-start md:self-auto bg-[#1B4332] hover:bg-[#163829] active:scale-95 text-white font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl shadow-xl shadow-emerald-900/15 transition-all text-xs uppercase tracking-[2px] flex items-center gap-2'
+        >
+          <span>＋</span>
+          <span>Add New Flavour</span>
         </button>
       </div>
 
-      {/* Category filter tabs */}
-      <div className='flex gap-2 mb-4 sm:mb-5 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar'>
-        <button onClick={() => { setSelectedCat(''); navigate('/products'); }}
-          className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap
-                      transition-all shrink-0 border
-            ${!selectedCat
-              ? 'bg-[#1B5E4B] text-white border-[#1B5E4B] shadow-md'
-              : 'bg-white text-gray-500 border-gray-200 hover:border-[#1B5E4B]/30'}`}>
-          All
-        </button>
-        {categories.map((c) => (
-          <button key={c._id}
+      <div className='bg-white rounded-[28px] border border-green-50 shadow-sm p-4 sm:p-5 mb-8 flex flex-col md:flex-row items-center justify-between gap-4'>
+        <div className='flex items-center gap-2 overflow-x-auto w-full md:w-auto no-scrollbar pb-1 md:pb-0'>
+          <button
             onClick={() => {
-              setSelectedCat(c._id);
-              navigate(`/products?category=${c._id}&name=${encodeURIComponent(c.name)}`);
+              setSelectedCat('');
+              navigate('/products');
             }}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap
-                        transition-all shrink-0 border
-              ${selectedCat === c._id
-                ? 'bg-[#1B5E4B] text-white border-[#1B5E4B] shadow-md'
-                : 'bg-white text-gray-500 border-gray-200 hover:border-[#1B5E4B]/30'}`}>
-            {c.name}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition whitespace-nowrap ${
+              !selectedCat
+                ? 'bg-[#1B4332] text-white shadow-sm'
+                : 'bg-[#F2F7F2] text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            All Collections
           </button>
-        ))}
+          {categories.map((c) => (
+            <button
+              key={c._id}
+              onClick={() => {
+                setSelectedCat(c._id);
+                navigate(`/products?category=${c._id}&name=${encodeURIComponent(c.name)}`);
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition whitespace-nowrap ${
+                selectedCat === c._id
+                  ? 'bg-[#1B4332] text-white shadow-sm'
+                  : 'bg-[#F2F7F2] text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+
+        <div className='w-full md:w-72'>
+          <input
+            type='text'
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder='Quick search flavour name...'
+            className='w-full bg-[#F2F7F2] border-none rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500'
+          />
+        </div>
       </div>
 
-      {isLoading ? <Spinner /> : (
+      {isLoading ? (
+        <div className='py-20 text-center'><Spinner /></div>
+      ) : (
         <>
-          {/* Desktop table */}
-          <div className='hidden sm:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden'>
+          <div className='hidden sm:block bg-white rounded-[32px] border border-green-50 shadow-sm overflow-hidden'>
             <div className='overflow-x-auto'>
-              <table className='w-full min-w-[600px]'>
-                <thead>
-                  <tr className='border-b border-gray-100'>
-                    {['Product', 'Category', 'Price', 'Availability', 'Actions'].map(h => (
-                      <th key={h} className='text-left px-5 py-3.5 text-xs font-extrabold
-                                             text-gray-400 uppercase tracking-wider'>{h}</th>
+              <table className='w-full min-w-[650px] text-left'>
+                <thead className='bg-[#F2F7F2]/60'>
+                  <tr>
+                    {['Product Flavour', 'Category', 'Price Matrix', 'Stock Availability', 'Actions'].map((h) => (
+                      <th
+                        key={h}
+                        className='px-6 py-4 text-[10px] font-black text-emerald-900/50 uppercase tracking-widest'
+                      >
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {products.length === 0 ? (
-                    <tr><td colSpan={5} className='text-center py-16 text-gray-300'>
-                      <span className='text-4xl block mb-2'>🍦</span>No products found
-                    </td></tr>
-                  ) : products.map((p) => {
-                    const isIcecreamProduct = p.category?.productType === 'icecream';
-                    const allVariantsOff    = isIcecreamProduct &&
-                      !Object.values(p.variantAvailability || {}).some(Boolean);
+                <tbody className='divide-y divide-slate-100'>
+                  {filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className='text-center py-20 text-slate-400 font-bold'>
+                        No products found matching criteria
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map((p) => {
+                      const isIcecreamProduct = p.category?.productType === 'icecream';
+                      const allVariantsOff = isIcecreamProduct && !Object.values(p.variantAvailability || {}).some(Boolean);
 
-                    return (
-                      <tr key={p._id}
-                        className={`border-b border-gray-50 hover:bg-[#F7FBF9] transition-colors
-                          ${allVariantsOff ? 'opacity-60' : ''}`}>
-
-                        <td className='px-5 py-4'>
-                          <div className='flex items-center gap-3'>
-                            {p.imageUrl
-                              ? <img src={p.imageUrl} className='w-10 h-10 rounded-xl object-cover border border-gray-100' />
-                              : <div className='w-10 h-10 rounded-xl bg-[#F7FBF9] border border-[#1B5E4B]/10
-                                                flex items-center justify-center text-xl'>🍦</div>}
-                            <div>
-                              <p className='font-semibold text-gray-800 text-sm'>{p.name}</p>
-                              {p.isZeroSugar && (
-                                <span className='text-[10px] bg-green-100 text-green-700 px-2 py-0.5
-                                                 rounded-full font-semibold'>Zero Sugar</span>
+                      return (
+                        <tr
+                          key={p._id}
+                          className={`hover:bg-[#F2F7F2]/40 transition-colors ${allVariantsOff ? 'opacity-60' : ''}`}
+                        >
+                          <td className='px-6 py-4'>
+                            <div className='flex items-center gap-3.5'>
+                              {p.imageUrl ? (
+                                <img
+                                  src={p.imageUrl}
+                                  alt={p.name}
+                                  className='w-12 h-12 rounded-2xl object-cover border border-slate-100 shadow-sm'
+                                />
+                              ) : (
+                                <div className='w-12 h-12 rounded-2xl bg-[#F2F7F2] border border-emerald-100 flex items-center justify-center font-black text-xs text-[#1B4332]'>
+                                  A
+                                </div>
                               )}
-                              {allVariantsOff && (
-                                <span className='text-[10px] bg-red-100 text-red-600 px-2 py-0.5
-                                                 rounded-full font-semibold ml-1'>Out of Stock</span>
-                              )}
-                              {p.snoozedUntil && new Date(p.snoozedUntil) > new Date() && (
-                                <span className='text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5
-                                                 rounded-full font-semibold ml-1'>
-                                  ⏰ Snoozed ({formatSnooze(p.snoozedUntil)})
-                                </span>
-                              )}
+                              <div>
+                                <p className='font-black text-slate-800 text-sm'>{p.name}</p>
+                                <div className='flex items-center gap-1.5 mt-1 flex-wrap'>
+                                  {p.isZeroSugar && (
+                                    <span className='text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-black uppercase tracking-wider'>
+                                      Zero Sugar
+                                    </span>
+                                  )}
+                                  {allVariantsOff && (
+                                    <span className='text-[9px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-black uppercase tracking-wider'>
+                                      Out of Stock
+                                    </span>
+                                  )}
+                                  {p.snoozedUntil && new Date(p.snoozedUntil) > new Date() && (
+                                    <span className='text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black uppercase tracking-wider'>
+                                      Snoozed ({formatSnooze(p.snoozedUntil)})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className='px-5 py-4'>
-                          <span className='text-xs bg-[#F7FBF9] text-[#1B5E4B] font-semibold
-                                           px-2.5 py-1 rounded-lg border border-[#1B5E4B]/15'>
-                            {p.category?.name}
-                          </span>
-                        </td>
+                          <td className='px-6 py-4'>
+                            <span className='text-xs font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-100'>
+                              {p.category?.name || 'Standard'}
+                            </span>
+                          </td>
 
-                        <td className='px-5 py-4'>
-                          <span className='font-bold text-gray-800 text-sm'>
-                            {isIcecreamProduct
-                              ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0} – ₹${p.basePrices?.shareIt || p.basePrices?.binge || p.resolvedPrices?.shareIt || p.resolvedPrices?.binge || 0}`
-                              : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
-                          </span>
-                        </td>
+                          <td className='px-6 py-4'>
+                            <span className='font-black text-slate-800 text-xs'>
+                              {isIcecreamProduct
+                                ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0} – ₹${p.basePrices?.shareIt || p.basePrices?.binge || p.resolvedPrices?.shareIt || p.resolvedPrices?.binge || 0}`
+                                : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
+                            </span>
+                          </td>
 
-                        <td className='px-5 py-4'>
-                          {isIcecreamProduct ? (
+                          <td className='px-6 py-4'>
+                            {isIcecreamProduct ? (
+                              <div className='flex items-center gap-3'>
+                                <button
+                                  type='button'
+                                  onClick={() => setVariantModalProduct(p)}
+                                  className='flex items-center gap-1.5 bg-[#F2F7F2] hover:bg-emerald-100 text-[#1B4332] font-black text-xs px-3.5 py-2 rounded-xl transition border border-emerald-200/60'
+                                >
+                                  <div className='flex gap-1'>
+                                    {['small', 'regular', 'large', 'binge', ...(p.category?.hasShareIt ? ['shareIt'] : [])].map((v) => (
+                                      <div
+                                        key={v}
+                                        className={`w-2 h-2 rounded-full ${
+                                          p.variantAvailability?.[v] !== false ? 'bg-[#1B4332]' : 'bg-gray-300'
+                                        }`}
+                                      />
+                                    ))}
+                                  </div>
+                                  <span className='text-[10px] uppercase tracking-wider'>Sizes ▾</span>
+                                </button>
+
+                                <button
+                                  type='button'
+                                  onClick={() => handleToggleClick(p)}
+                                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
+                                    p.isAvailable && !allVariantsOff ? 'bg-[#1B4332]' : 'bg-gray-200'
+                                  }`}
+                                >
+                                  <span
+                                    className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300 ${
+                                      p.isAvailable && !allVariantsOff ? 'left-6' : 'left-0.5'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type='button'
+                                onClick={() => handleToggleClick(p)}
+                                className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
+                                  p.isAvailable ? 'bg-[#1B4332]' : 'bg-gray-200'
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300 ${
+                                    p.isAvailable ? 'left-6' : 'left-0.5'
+                                  }`}
+                                />
+                              </button>
+                            )}
+                          </td>
+
+                          <td className='px-6 py-4'>
                             <div className='flex items-center gap-2'>
                               <button
-                                onClick={() => setVariantModalProduct(p)}
-                                className='flex items-center gap-1.5 bg-[#1B5E4B]/10 hover:bg-[#1B5E4B]/20
-                                           text-[#1B5E4B] font-bold text-xs px-3 py-2 rounded-xl
-                                           transition border border-[#1B5E4B]/20'>
-                                <div className='flex gap-0.5'>
-                                  {['small','regular','large','binge',
-                                    ...(p.category?.hasShareIt ? ['shareIt'] : [])
-                                  ].map(v => (
-                                    <div key={v}
-                                      className={`w-2 h-2 rounded-full
-                                        ${p.variantAvailability?.[v] !== false ? 'bg-[#1B5E4B]' : 'bg-gray-300'}`}
-                                    />
-                                  ))}
-                                </div>
-                                <span>Sizes ▾</span>
+                                type='button'
+                                onClick={() => {
+                                  setEditingId(p._id);
+                                  setForm({ name: p.name, category: p.category?._id || '', isZeroSugar: p.isZeroSugar });
+                                  setPreview(p.imageUrl || '');
+                                  setShowModal(true);
+                                }}
+                                className='text-[11px] font-black uppercase tracking-wider text-[#1B4332] bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition'
+                              >
+                                Edit
                               </button>
-
-                              <button onClick={() => handleToggleClick(p)}
-                                className={`relative w-11 h-6 rounded-full transition-colors duration-300
-                                  ${p.isAvailable && !allVariantsOff ? 'bg-[#1B5E4B]' : 'bg-gray-200'}`}>
-                                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm
-                                                  transition-all duration-300
-                                  ${p.isAvailable && !allVariantsOff ? 'left-5' : 'left-0.5'}`} />
+                              <button
+                                type='button'
+                                onClick={() => handleDelete(p._id)}
+                                className='text-[11px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition'
+                              >
+                                Delete
                               </button>
                             </div>
-                          ) : (
-                            <button onClick={() => handleToggleClick(p)}
-                              className={`relative w-11 h-6 rounded-full transition-colors duration-300
-                                ${p.isAvailable ? 'bg-[#1B5E4B]' : 'bg-gray-200'}`}>
-                              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm
-                                                transition-all duration-300
-                                ${p.isAvailable ? 'left-5' : 'left-0.5'}`} />
-                            </button>
-                          )}
-                        </td>
-
-                        <td className='px-5 py-4'>
-                          <div className='flex gap-1.5'>
-                            <button onClick={() => {
-                              setEditingId(p._id);
-                              setForm({ name:p.name, category:p.category?._id||'', isZeroSugar:p.isZeroSugar });
-                              setPreview(p.imageUrl||'');
-                              setShowModal(true);
-                            }} className='text-xs font-semibold text-[#1B5E4B] bg-[#1B5E4B]/10
-                                          hover:bg-[#1B5E4B]/20 px-3 py-1.5 rounded-lg transition'>
-                              Edit
-                            </button>
-                            <button onClick={() => handleDelete(p._id)}
-                              className='text-xs font-semibold text-red-500 bg-red-50
-                                         hover:bg-red-100 px-3 py-1.5 rounded-lg transition'>
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Mobile cards */}
           <div className='sm:hidden space-y-3'>
-            {products.length === 0 ? (
-              <div className='text-center py-16 text-gray-300'>
-                <span className='text-4xl block mb-2'>🍦</span>
+            {filteredProducts.length === 0 ? (
+              <div className='text-center py-16 text-slate-400'>
                 <p className='text-sm font-bold'>No products found</p>
               </div>
-            ) : products.map((p) => {
-              const isIcecreamProduct = p.category?.productType === 'icecream';
-              const allVariantsOff    = isIcecreamProduct &&
-                !Object.values(p.variantAvailability || {}).some(Boolean);
+            ) : (
+              filteredProducts.map((p) => {
+                const isIcecreamProduct = p.category?.productType === 'icecream';
+                const allVariantsOff = isIcecreamProduct && !Object.values(p.variantAvailability || {}).some(Boolean);
 
-              return (
-                <div key={p._id}
-                  className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4
-                    ${allVariantsOff ? 'opacity-60' : ''}`}>
-                  <div className='flex items-start gap-3 mb-3'>
-                    {p.imageUrl
-                      ? <img src={p.imageUrl} className='w-12 h-12 rounded-xl object-cover border border-gray-100 shrink-0' />
-                      : <div className='w-12 h-12 rounded-xl bg-[#F7FBF9] border border-[#1B5E4B]/10
-                                        flex items-center justify-center text-2xl shrink-0'>🍦</div>}
-                    <div className='flex-1 min-w-0'>
-                      <p className='font-semibold text-gray-800 text-sm truncate'>{p.name}</p>
-                      <div className='flex flex-wrap gap-1 mt-1'>
-                        <span className='text-[10px] bg-[#F7FBF9] text-[#1B5E4B] font-semibold
-                                         px-2 py-0.5 rounded-lg border border-[#1B5E4B]/15'>
-                          {p.category?.name}
-                        </span>
-                        {p.isZeroSugar && (
-                          <span className='text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold'>Zero Sugar</span>
-                        )}
-                        {allVariantsOff && (
-                          <span className='text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold'>Out of Stock</span>
-                        )}
-                        {p.snoozedUntil && new Date(p.snoozedUntil) > new Date() && (
-                          <span className='text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-semibold'>
-                            ⏰ Snoozed ({formatSnooze(p.snoozedUntil)})
+                return (
+                  <div
+                    key={p._id}
+                    className={`bg-white rounded-2xl border border-gray-200 shadow-xs p-4 ${
+                      allVariantsOff ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <div className='flex items-start gap-3 mb-3'>
+                      {p.imageUrl ? (
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className='w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0'
+                        />
+                      ) : (
+                        <div className='w-12 h-12 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center font-bold text-xs text-[#1B4332] shrink-0'>
+                          A
+                        </div>
+                      )}
+                      <div className='flex-1 min-w-0'>
+                        <p className='font-bold text-slate-800 text-sm truncate'>{p.name}</p>
+                        <div className='flex flex-wrap gap-1 mt-1'>
+                          <span className='text-[9px] bg-emerald-50 text-emerald-800 font-bold uppercase px-2 py-0.5 rounded-lg border border-emerald-100'>
+                            {p.category?.name}
                           </span>
-                        )}
+                          {p.isZeroSugar && (
+                            <span className='text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase'>
+                              Zero Sugar
+                            </span>
+                          )}
+                          {allVariantsOff && (
+                            <span className='text-[9px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-bold uppercase'>
+                              Out of Stock
+                            </span>
+                          )}
+                          {p.snoozedUntil && new Date(p.snoozedUntil) > new Date() && (
+                            <span className='text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold uppercase'>
+                              Snoozed ({formatSnooze(p.snoozedUntil)})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className='text-right shrink-0'>
+                        <p className='font-black text-slate-800 text-xs'>
+                          {isIcecreamProduct
+                            ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0}+`
+                            : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
+                        </p>
                       </div>
                     </div>
-                    <div className='flex flex-col items-end shrink-0'>
-                      <p className='font-bold text-gray-800 text-sm'>
-                        {isIcecreamProduct
-                          ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0}+`
-                          : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className='flex items-center justify-between gap-2'>
-                    <div className='flex items-center gap-2'>
-                      {isIcecreamProduct && (
+                    <div className='flex items-center justify-between gap-2 pt-2 border-t border-slate-100'>
+                      <div className='flex items-center gap-2'>
+                        {isIcecreamProduct && (
+                          <button
+                            type='button'
+                            onClick={() => setVariantModalProduct(p)}
+                            className='flex items-center gap-1.5 bg-[#F2F7F2] text-[#1B4332] font-black text-xs px-3 py-1.5 rounded-xl border border-emerald-200'
+                          >
+                            <div className='flex gap-0.5'>
+                              {['small', 'regular', 'large', 'binge', ...(p.category?.hasShareIt ? ['shareIt'] : [])].map((v) => (
+                                <div
+                                  key={v}
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    p.variantAvailability?.[v] !== false ? 'bg-[#1B4332]' : 'bg-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className='text-[10px] uppercase'>Sizes ▾</span>
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => setVariantModalProduct(p)}
-                          className='flex items-center gap-1.5 bg-[#1B5E4B]/10 text-[#1B5E4B] font-bold text-xs px-3 py-2 rounded-xl border border-[#1B5E4B]/20'>
-                          <div className='flex gap-0.5'>
-                            {['small','regular','large','binge',
-                              ...(p.category?.hasShareIt ? ['shareIt'] : [])
-                            ].map(v => (
-                              <div key={v}
-                                className={`w-1.5 h-1.5 rounded-full
-                                  ${p.variantAvailability?.[v] !== false ? 'bg-[#1B5E4B]' : 'bg-gray-300'}`}
-                              />
-                            ))}
-                          </div>
-                          <span>Sizes ▾</span>
+                          type='button'
+                          onClick={() => handleToggleClick(p)}
+                          className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
+                            p.isAvailable && !allVariantsOff ? 'bg-[#1B4332]' : 'bg-gray-200'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300 ${
+                              p.isAvailable && !allVariantsOff ? 'left-5' : 'left-0.5'
+                            }`}
+                          />
                         </button>
-                      )}
+                      </div>
 
-                      <button onClick={() => handleToggleClick(p)}
-                        className={`relative w-10 h-5 rounded-full transition-colors duration-300
-                          ${p.isAvailable && !allVariantsOff ? 'bg-[#1B5E4B]' : 'bg-gray-200'}`}>
-                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm
-                                          transition-all duration-300
-                          ${p.isAvailable && !allVariantsOff ? 'left-5' : 'left-0.5'}`} />
-                      </button>
-                    </div>
-
-                    <div className='flex gap-2 ml-auto'>
-                      <button onClick={() => {
-                        setEditingId(p._id);
-                        setForm({ name:p.name, category:p.category?._id||'', isZeroSugar:p.isZeroSugar });
-                        setPreview(p.imageUrl||'');
-                        setShowModal(true);
-                      }} className='text-xs font-semibold text-[#1B5E4B] bg-[#1B5E4B]/10
-                                    hover:bg-[#1B5E4B]/20 px-3 py-2 rounded-lg transition'>
-                        Edit
-                      </button>
-                      <button onClick={() => handleDelete(p._id)}
-                        className='text-xs font-semibold text-red-500 bg-red-50
-                                   hover:bg-red-100 px-3 py-2 rounded-lg transition'>
-                        Delete
-                      </button>
+                      <div className='flex gap-2 ml-auto'>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setEditingId(p._id);
+                            setForm({ name: p.name, category: p.category?._id || '', isZeroSugar: p.isZeroSugar });
+                            setPreview(p.imageUrl || '');
+                            setShowModal(true);
+                          }}
+                          className='text-[10px] font-black uppercase text-[#1B4332] bg-emerald-50 px-3 py-1.5 rounded-xl'
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => handleDelete(p._id)}
+                          className='text-[10px] font-black uppercase text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl'
+                        >
+                          Del
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </>
       )}
@@ -721,79 +841,112 @@ export default function ProductsPage() {
         />
       )}
 
-      {/* Add/Edit product modal */}
       {showModal && (
-        <div className='fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center
-                        justify-center z-50 p-0 sm:p-4'>
-          <div className='bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-md overflow-hidden max-h-[90vh] overflow-y-auto'>
-            <div className='bg-[#1B5E4B] px-5 sm:px-6 py-4 sm:py-5 sticky top-0 z-10'>
-              <h2 className='text-base sm:text-lg font-extrabold text-white'>
-                {editingId ? '✏️ Edit Product' : '🍦 New Product'}
-              </h2>
-            </div>
-            <form onSubmit={handleSubmit} className='p-5 sm:p-6 space-y-4'>
+        <div className='fixed inset-0 bg-[#1B4332]/30 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4'>
+          <div className='bg-white rounded-t-[36px] sm:rounded-3xl shadow-2xl w-full sm:max-w-md overflow-hidden max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200'>
+            <div className='bg-[#1B4332] px-6 py-5 flex items-center justify-between sticky top-0 z-10'>
               <div>
-                <label className='text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5'>
+                <span className='text-[10px] font-black text-emerald-400 uppercase tracking-widest'>Flavour Setup</span>
+                <h2 className='text-lg font-black text-white'>
+                  {editingId ? 'Edit Product Flavour' : 'Create New Product'}
+                </h2>
+              </div>
+              <button onClick={closeModal} className='text-white/60 hover:text-white font-bold text-lg'>✕</button>
+            </div>
+            <form onSubmit={handleSubmit} className='p-6 space-y-4'>
+              <div>
+                <label className='text-xs font-black text-slate-400 uppercase tracking-wide block mb-1.5'>
                   Product Name
                 </label>
-                <input placeholder='e.g. Belgian Bite' value={form.name}
-                  onChange={(e) => setForm({...form, name:e.target.value})}
-                  className='w-full border border-gray-200 rounded-xl px-4 py-3
-                             focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                             focus:border-[#1B5E4B] bg-gray-50 text-sm' required />
+                <input
+                  placeholder='e.g. Roasted Almond'
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className='w-full border-none rounded-2xl px-4 py-3 bg-[#F2F7F2] text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500'
+                  required
+                />
               </div>
 
               <div>
-                <label className='text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5'>
-                  Category
+                <label className='text-xs font-black text-slate-400 uppercase tracking-wide block mb-1.5'>
+                  Category Collection
                 </label>
-                <select value={form.category || selectedCat}
-                  onChange={(e) => setForm({...form, category:e.target.value})}
-                  className='w-full border border-gray-200 rounded-xl px-4 py-3
-                             focus:outline-none focus:ring-2 focus:ring-[#1B5E4B]/25
-                             focus:border-[#1B5E4B] bg-gray-50 text-sm' required>
+                <select
+                  value={form.category || selectedCat}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className='w-full border-none rounded-2xl px-4 py-3 bg-[#F2F7F2] text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500'
+                  required
+                >
                   <option value=''>Select category</option>
-                  {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                  {categories.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <label className='flex items-center gap-3 cursor-pointer select-none'>
+              <label className='flex items-center gap-3 cursor-pointer select-none py-1'>
                 <div className='relative'>
-                  <input type='checkbox' className='sr-only' checked={form.isZeroSugar}
-                    onChange={(e) => setForm({...form, isZeroSugar:e.target.checked})} />
-                  <div className={`w-11 h-6 rounded-full transition-colors
-                    ${form.isZeroSugar ? 'bg-[#1B5E4B]' : 'bg-gray-200'}`}>
-                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all
-                      ${form.isZeroSugar ? 'left-5' : 'left-0.5'}`} />
+                  <input
+                    type='checkbox'
+                    className='sr-only'
+                    checked={form.isZeroSugar}
+                    onChange={(e) => setForm({ ...form, isZeroSugar: e.target.checked })}
+                  />
+                  <div
+                    className={`w-11 h-6 rounded-full transition-colors ${
+                      form.isZeroSugar ? 'bg-[#1B4332]' : 'bg-gray-200'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
+                        form.isZeroSugar ? 'left-5' : 'left-0.5'
+                      }`}
+                    />
                   </div>
                 </div>
-                <span className='text-sm font-semibold text-gray-600'>Zero Added Sugar</span>
+                <span className='text-xs font-black text-slate-700 uppercase tracking-wider'>Zero Added Sugar</span>
               </label>
 
               <div>
-                <label className='text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5'>
+                <label className='text-xs font-black text-slate-400 uppercase tracking-wide block mb-1.5'>
                   Product Image
                 </label>
-                {preview && <img src={preview} className='w-full h-28 object-cover rounded-xl mb-2 border border-gray-100' />}
-                <input type='file' accept='image/*'
+                {preview && (
+                  <img
+                    src={preview}
+                    alt='Preview'
+                    className='w-full h-32 object-cover rounded-2xl mb-2 border border-slate-100 shadow-sm'
+                  />
+                )}
+                <input
+                  type='file'
+                  accept='image/*'
                   onChange={(e) => {
                     const f = e.target.files[0];
-                    if (f) { setImageFile(f); setPreview(URL.createObjectURL(f)); }
+                    if (f) {
+                      setImageFile(f);
+                      setPreview(URL.createObjectURL(f));
+                    }
                   }}
-                  className='w-full text-sm text-gray-400
-                             file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0
-                             file:text-sm file:font-semibold file:bg-[#1B5E4B]/10
-                             file:text-[#1B5E4B] hover:file:bg-[#1B5E4B]/20' />
+                  className='w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:uppercase file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100'
+                />
               </div>
 
-              <div className='flex gap-3 pt-1 pb-2'>
-                <button type='button' onClick={closeModal}
-                  className='flex-1 border border-gray-200 py-3 rounded-xl font-semibold
-                             text-gray-500 hover:bg-gray-50 transition text-sm'>Cancel</button>
-                <button type='submit'
-                  className='flex-1 bg-[#1B5E4B] hover:bg-[#164e3e] text-white font-bold
-                             py-3 rounded-xl transition shadow-md shadow-[#1B5E4B]/20 text-sm'>
-                  Save Product
+              <div className='flex gap-3 pt-3'>
+                <button
+                  type='button'
+                  onClick={closeModal}
+                  className='flex-1 border border-slate-200 py-3 rounded-xl font-black uppercase text-xs tracking-wider text-slate-500 hover:bg-slate-50 transition'
+                >
+                  Cancel
+                </button>
+                <button
+                  type='submit'
+                  className='flex-1 bg-[#1B4332] hover:bg-[#163829] text-white font-black py-3 rounded-xl transition shadow-xl shadow-emerald-900/15 text-xs uppercase tracking-wider'
+                >
+                  Save Flavour
                 </button>
               </div>
             </form>

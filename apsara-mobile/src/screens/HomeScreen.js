@@ -35,7 +35,7 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
-  const { activeOrder, updateActiveOrderStatus, saveActiveOrder } = useCart();
+  const { activeOrder, updateActiveOrderStatus, saveActiveOrder, syncActiveOrders } = useCart();
 
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
@@ -87,23 +87,10 @@ export default function HomeScreen() {
     try {
       const res = await api.get('/orders/my');
       const orderList = res.data?.data?.orders || res.data?.data || [];
-      if (orderList.length > 0) {
-        const latest = orderList[0];
-        const status = latest.status || latest.orderStatus || 'placed';
-        if (['placed', 'preparing', 'out_for_delivery'].includes(status)) {
-          saveActiveOrder({
-            orderId: latest._id,
-            orderNumber: latest.orderNumber,
-            status,
-            total: latest.pricing?.total ?? latest.totalAmount ?? 0,
-          });
-        } else if (activeOrderRef.current && (status === 'delivered' || status === 'cancelled')) {
-          updateActiveOrderStatus(status);
-        }
-      }
+      syncActiveOrders(orderList);
     } catch (e) {
     }
-  }, [isAuthenticated, saveActiveOrder, updateActiveOrderStatus]);
+  }, [isAuthenticated, syncActiveOrders]);
 
   const loadDismissedBroadcasts = useCallback(async () => {
     try {
@@ -166,13 +153,17 @@ export default function HomeScreen() {
     if (!activeOrder?.orderId) return;
 
     connectOrderSocket(activeOrder.orderId, (newStatus) => {
-      updateActiveOrderStatus(newStatus);
+      if (newStatus === 'delivered' || newStatus === 'cancelled') {
+        syncActiveOrderFromBackend();
+      } else {
+        updateActiveOrderStatus(newStatus);
+      }
     });
 
     return () => {
       leaveOrderSocket(activeOrder.orderId);
     };
-  }, [activeOrder?.orderId]);
+  }, [activeOrder?.orderId, syncActiveOrderFromBackend, updateActiveOrderStatus]);
 
   useEffect(() => {
     if (!liveBroadcast) return;

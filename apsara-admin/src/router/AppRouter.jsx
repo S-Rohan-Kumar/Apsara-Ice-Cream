@@ -34,7 +34,6 @@ export default function AppRouter() {
           <Route path='/orders'     element={<OrdersPage />} />
           <Route path='/orders/:id' element={<OrderDetailPage />} />
 
-          {/* Products — supports ?category=id&name=Fruitylicious from Categories page */}
           <Route path='/products'   element={<ProductsPage />} />
 
           <Route path='/categories' element={<CategoriesPage />} />

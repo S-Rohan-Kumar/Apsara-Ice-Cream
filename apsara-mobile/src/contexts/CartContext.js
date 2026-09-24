@@ -6,6 +6,7 @@ const CartContext = createContext(null);
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState([]);
   const [activeOrder, setActiveOrder] = useState(null);
+  const [activeOrders, setActiveOrders] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -24,9 +25,20 @@ export const CartProvider = ({ children }) => {
       if (stored) {
         setItems(JSON.parse(stored));
       }
-      const storedOrder = await AsyncStorage.getItem('apsara_active_order');
-      if (storedOrder) {
-        setActiveOrder(JSON.parse(storedOrder));
+      const storedOrders = await AsyncStorage.getItem('apsara_active_orders');
+      if (storedOrders) {
+        const parsed = JSON.parse(storedOrders);
+        setActiveOrders(parsed);
+        if (parsed.length > 0) {
+          setActiveOrder(parsed[0]);
+        }
+      } else {
+        const storedOrder = await AsyncStorage.getItem('apsara_active_order');
+        if (storedOrder) {
+          const parsed = JSON.parse(storedOrder);
+          setActiveOrder(parsed);
+          setActiveOrders([parsed]);
+        }
       }
     } catch (e) {
     } finally {
@@ -42,7 +54,8 @@ export const CartProvider = ({ children }) => {
         prev &&
         prev.orderId === orderData.orderId &&
         prev.status === orderData.status &&
-        prev.total === orderData.total
+        prev.total === orderData.total &&
+        prev.activeCount === orderData.activeCount
       ) {
         return prev;
       }
@@ -70,7 +83,47 @@ export const CartProvider = ({ children }) => {
 
   const clearActiveOrder = () => {
     setActiveOrder(null);
+    setActiveOrders([]);
     AsyncStorage.removeItem('apsara_active_order').catch(() => {});
+    AsyncStorage.removeItem('apsara_active_orders').catch(() => {});
+  };
+
+  const syncActiveOrders = (orderList = []) => {
+    if (!Array.isArray(orderList)) {
+      clearActiveOrder();
+      return;
+    }
+    const activeList = orderList.filter((o) => {
+      const st = o.status || o.orderStatus || 'placed';
+      return ['placed', 'preparing', 'out_for_delivery'].includes(st);
+    });
+
+    if (activeList.length === 0) {
+      clearActiveOrder();
+      return;
+    }
+
+    const priority = { out_for_delivery: 3, preparing: 2, placed: 1 };
+    const sorted = [...activeList].sort((a, b) => {
+      const pA = priority[a.status || a.orderStatus] || 0;
+      const pB = priority[b.status || b.orderStatus] || 0;
+      if (pA !== pB) return pB - pA;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
+
+    const formattedActive = sorted.map((ord) => ({
+      orderId: ord._id,
+      orderNumber: ord.orderNumber,
+      status: ord.status || ord.orderStatus || 'placed',
+      total: ord.pricing?.total ?? ord.totalAmount ?? 0,
+      activeCount: sorted.length,
+    }));
+
+    setActiveOrders(formattedActive);
+    AsyncStorage.setItem('apsara_active_orders', JSON.stringify(formattedActive)).catch(() => {});
+
+    const primary = formattedActive[0];
+    saveActiveOrder(primary);
   };
 
   const getItemQuantity = (productId, variant = 'regular') => {
@@ -163,9 +216,11 @@ export const CartProvider = ({ children }) => {
         packagingFee,
         grandTotal,
         activeOrder,
+        activeOrders,
         saveActiveOrder,
         updateActiveOrderStatus,
         clearActiveOrder,
+        syncActiveOrders,
         getItemQuantity,
         getProductTotalQuantity,
         addToCart,
