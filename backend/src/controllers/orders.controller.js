@@ -4,6 +4,7 @@ import Order, { generateOrderNumber } from '../models/order.model.js';
 import Product   from '../models/product.model.js';
 import Offer     from '../models/offer.model.js';
 import User      from '../models/user.model.js';
+import StoreSettings from '../models/storeSettings.model.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { APIResponse }  from '../utils/api-response.js';
 import { APIError }     from '../utils/api-error.js';
@@ -96,6 +97,11 @@ const fetchProductsMap = async (items) => {
 
 // ─── POST /api/orders/initiate ────────────────────────────────────────────────
 const initiateOrder = asyncHandler(async (req, res) => {
+  const storeSettings = await StoreSettings.findOne();
+  if (storeSettings && storeSettings.isStoreOpen === false) {
+    throw new APIError(400, storeSettings.closedNotice || 'Store is currently closed and not accepting orders.');
+  }
+
   const { items, paymentMethod } = req.body;
 
   if (!items || items.length === 0) throw new APIError(400, 'Order must have at least one item');
@@ -144,6 +150,11 @@ const initiateOrder = asyncHandler(async (req, res) => {
 
 // ─── POST /api/orders/confirm ─────────────────────────────────────────────────
 const confirmOrder = asyncHandler(async (req, res) => {
+  const storeSettings = await StoreSettings.findOne();
+  if (storeSettings && storeSettings.isStoreOpen === false) {
+    throw new APIError(400, storeSettings.closedNotice || 'Store is currently closed and not accepting orders.');
+  }
+
   const {
     razorpayOrderId, razorpayPaymentId, razorpaySignature,
     items, deliveryAddress, deliveryPhone, deliveryLocation, paymentMethod,

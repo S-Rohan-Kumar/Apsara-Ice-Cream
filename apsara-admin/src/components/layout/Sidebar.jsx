@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { NAV_LINKS } from '../../constants';
 import { selectIsConnected } from '../../slices/socketSlice';
 import { useGetAdminOrdersQuery } from '../../slices/orderApiSlice';
+import { useGetStoreStatusQuery } from '../../slices/storeApiSlice';
 import { logOut } from '../../slices/authSlice';
 
 function Icon({ name, className = 'w-4 h-4' }) {
@@ -76,6 +77,9 @@ export function Sidebar({ onClose }) {
     { status: '', page: 1 },
     { pollingInterval: 10000 }
   );
+
+  const { data: storeData } = useGetStoreStatusQuery(undefined, { pollingInterval: 10000 });
+  const isStoreOpen = storeData?.isStoreOpen ?? true;
 
   const pendingCount = useMemo(() => {
     const list = data?.orders || [];
@@ -161,13 +165,13 @@ export function Sidebar({ onClose }) {
       <div className='p-4 border-t border-gray-100'>
         <div className='bg-gray-50 rounded-xl p-3 border border-gray-100 flex items-center justify-between'>
           <div className='flex items-center gap-2'>
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+            <div className={`w-2 h-2 rounded-full ${!isConnected ? 'bg-amber-500 animate-pulse' : (isStoreOpen ? 'bg-emerald-500' : 'bg-rose-500')}`} />
             <div>
               <p className='text-[10px] font-bold text-slate-800'>
-                {isConnected ? 'Store Online' : 'Connecting...'}
+                {!isConnected ? 'Connecting...' : (isStoreOpen ? 'Store Online' : 'Store Offline')}
               </p>
               <p className='text-[9px] text-gray-400'>
-                Apsara Mandya
+                {isStoreOpen ? 'Accepting Orders' : 'Store Closed'}
               </p>
             </div>
           </div>

@@ -5,6 +5,8 @@ import {
   toggleSound,
 } from '../../slices/socketSlice';
 import { selectUserInfo } from '../../slices/authSlice';
+import { useGetStoreStatusQuery, useUpdateStoreStatusMutation } from '../../slices/storeApiSlice';
+import { useToast } from '../../hooks/useToast';
 import { playOrderChime } from '../../utils/sound';
 
 export function Topbar({ onMenuClick }) {
@@ -12,6 +14,26 @@ export function Topbar({ onMenuClick }) {
   const isConnected = useSelector(selectIsConnected);
   const soundEnabled = useSelector(selectSoundEnabled);
   const dispatch = useDispatch();
+  const { showSuccess, showError } = useToast();
+
+  const { data: storeData } = useGetStoreStatusQuery(undefined, { pollingInterval: 10000 });
+  const [updateStoreStatus, { isLoading: isUpdatingStore }] = useUpdateStoreStatusMutation();
+
+  const isStoreOpen = storeData?.isStoreOpen ?? true;
+
+  const handleToggleStore = async () => {
+    try {
+      const nextState = !isStoreOpen;
+      await updateStoreStatus({ isStoreOpen: nextState }).unwrap();
+      if (nextState) {
+        showSuccess('Store is now OPEN and accepting orders!');
+      } else {
+        showSuccess('Store is now CLOSED. Customers cannot place new orders.');
+      }
+    } catch (err) {
+      showError(err?.data?.message || 'Failed to update store status');
+    }
+  };
 
   const handleSoundToggle = () => {
     dispatch(toggleSound());
@@ -47,14 +69,31 @@ export function Topbar({ onMenuClick }) {
       </div>
 
       <div className='flex items-center gap-2 sm:gap-4'>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold ${
-          isConnected
-            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            : 'bg-amber-50 text-amber-800 border-amber-200'
-        }`}>
-          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-          <span>{isConnected ? 'Accepting Orders' : 'Connecting'}</span>
-        </div>
+        <button
+          onClick={handleToggleStore}
+          disabled={isUpdatingStore}
+          title={isStoreOpen ? 'Click to digitally CLOSE store' : 'Click to digitally OPEN store'}
+          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all shadow-xs ${
+            isStoreOpen
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400'
+              : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100 hover:border-rose-400'
+          }`}
+        >
+          <span className='flex items-center gap-1.5'>
+            <span className={`w-2 h-2 rounded-full ${isStoreOpen ? 'bg-emerald-500 shadow-sm' : 'bg-rose-500 animate-pulse'}`} />
+            <span className='font-black tracking-tight text-[11px] sm:text-xs'>
+              {isStoreOpen ? 'STORE OPEN' : 'STORE CLOSED'}
+            </span>
+          </span>
+
+          <span className={`w-7 h-4 rounded-full transition-colors relative flex items-center p-0.5 ${
+            isStoreOpen ? 'bg-emerald-600' : 'bg-gray-300'
+          }`}>
+            <span className={`w-3 h-3 rounded-full bg-white shadow-xs transition-transform duration-200 ${
+              isStoreOpen ? 'translate-x-3' : 'translate-x-0'
+            }`} />
+          </span>
+        </button>
 
         <button
           onClick={handleSoundToggle}

@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../lib/api';
 import { registerForPushNotificationsAsync } from '../lib/notifications';
 import { connectOrderSocket, leaveOrderSocket } from '../lib/socket';
-import { colors, spacing, fontSize } from '../theme';
+import { colors, spacing, radius, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import Header from '../components/common/Header';
@@ -48,6 +48,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState(null);
+  const [isStoreOpen, setIsStoreOpen] = useState(true);
+  const [storeNotice, setStoreNotice] = useState('');
 
   const socketRef = useRef(null);
   const flatListRef = useRef(null);
@@ -56,11 +58,12 @@ export default function HomeScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [catsRes, prodsRes, bcastRes, offersRes] = await Promise.allSettled([
+      const [catsRes, prodsRes, bcastRes, offersRes, storeRes] = await Promise.allSettled([
         api.get('/categories'),
         api.get('/products'),
         api.get('/notifications/broadcasts'),
         api.get('/offers/active'),
+        api.get('/admin/store-status'),
       ]);
 
       if (catsRes.status === 'fulfilled') {
@@ -74,6 +77,13 @@ export default function HomeScreen() {
       }
       if (offersRes.status === 'fulfilled') {
         setOffers(offersRes.value.data?.data || []);
+      }
+      if (storeRes.status === 'fulfilled') {
+        const sData = storeRes.value.data?.data;
+        if (sData) {
+          setIsStoreOpen(sData.isStoreOpen ?? true);
+          if (sData.closedNotice) setStoreNotice(sData.closedNotice);
+        }
       }
     } catch (err) {
     } finally {
@@ -134,6 +144,13 @@ export default function HomeScreen() {
         return currentDismissed;
       });
       setBroadcasts((prev) => [msg, ...prev.filter((b) => (b._id?.toString?.() || b._id) !== msgId)]);
+    });
+
+    socket.on('store_status_changed', (statusData) => {
+      if (statusData) {
+        setIsStoreOpen(statusData.isStoreOpen ?? true);
+        if (statusData.closedNotice) setStoreNotice(statusData.closedNotice);
+      }
     });
 
     return () => {
@@ -296,6 +313,15 @@ export default function HomeScreen() {
           isButton={true}
           onPress={() => navigation.navigate('Search')}
         />
+
+        {!isStoreOpen && (
+          <View style={styles.storeClosedBanner}>
+            <Ionicons name="moon" size={14} color="#991B1B" />
+            <Text style={styles.storeClosedBannerText} numberOfLines={1}>
+              {storeNotice || "Store is currently closed for orders • Reopening soon!"}
+            </Text>
+          </View>
+        )}
       </View>
 
       {liveBroadcast ? (
@@ -378,6 +404,26 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  storeClosedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.md,
+    gap: 6,
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  storeClosedBannerText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#991B1B',
+    flex: 1,
   },
   listContent: {
     paddingBottom: 115,

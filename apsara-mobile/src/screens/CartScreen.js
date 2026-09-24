@@ -53,12 +53,27 @@ export default function CartScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeOffers, setActiveOffers] = useState([]);
   const [liveProducts, setLiveProducts] = useState(null);
+  const [isStoreOpen, setIsStoreOpen] = useState(true);
+  const [storeNotice, setStoreNotice] = useState('');
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editFlat, setEditFlat] = useState(flatNo || '');
   const [editStreet, setEditStreet] = useState(address || '');
   const [editLandmark, setEditLandmark] = useState(landmark || '');
   const [editPhone, setEditPhone] = useState(phone || '');
+
+  const checkStoreStatus = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/store-status');
+      if (res.data?.data) {
+        setIsStoreOpen(res.data.data.isStoreOpen ?? true);
+        if (res.data.data.closedNotice) {
+          setStoreNotice(res.data.data.closedNotice);
+        }
+      }
+    } catch (e) {
+    }
+  }, []);
 
   const verifyLiveStock = useCallback(async () => {
     try {
@@ -71,12 +86,14 @@ export default function CartScreen() {
   useEffect(() => {
     fetchActiveOffers();
     verifyLiveStock();
-  }, [verifyLiveStock]);
+    checkStoreStatus();
+  }, [verifyLiveStock, checkStoreStatus]);
 
   useFocusEffect(
     useCallback(() => {
       verifyLiveStock();
-    }, [verifyLiveStock])
+      checkStoreStatus();
+    }, [verifyLiveStock, checkStoreStatus])
   );
 
   useEffect(() => {
@@ -182,6 +199,11 @@ export default function CartScreen() {
 
   const handlePlaceOrder = async () => {
     if (items.length === 0) return;
+
+    if (!isStoreOpen) {
+      Alert.alert('Store Closed', storeNotice || "We're currently closed • Kitchen is resting, reopening soon!");
+      return;
+    }
 
     if (hasUnavailableItems) {
       Alert.alert(
@@ -596,15 +618,25 @@ export default function CartScreen() {
         <TouchableOpacity
           style={[
             styles.placeOrderButton,
-            (isSubmitting || hasUnavailableItems) && styles.disabledButton,
+            (isSubmitting || hasUnavailableItems || !isStoreOpen) && styles.disabledButton,
+            !isStoreOpen && styles.storeClosedButton,
             hasUnavailableItems && styles.unavailablePlaceOrderButton,
           ]}
-          onPress={hasUnavailableItems ? () => removeUnavailableItems(unavailableKeys) : handlePlaceOrder}
+          onPress={
+            !isStoreOpen
+              ? () => Alert.alert('Store Closed', storeNotice || "We're currently closed • Kitchen is resting, reopening soon!")
+              : (hasUnavailableItems ? () => removeUnavailableItems(unavailableKeys) : handlePlaceOrder)
+          }
           disabled={isSubmitting}
           activeOpacity={0.85}
         >
           {isSubmitting ? (
             <ActivityIndicator size="small" color={colors.white} />
+          ) : !isStoreOpen ? (
+            <>
+              <Text style={styles.placeOrderText}>Store Currently Closed</Text>
+              <Ionicons name="moon" size={16} color={colors.white} />
+            </>
           ) : hasUnavailableItems ? (
             <>
               <Text style={styles.placeOrderText}>Remove Out-of-Stock Items</Text>
@@ -1194,6 +1226,10 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  storeClosedButton: {
+    backgroundColor: '#DC2626',
+    shadowColor: '#991B1B',
   },
   placeOrderText: {
     fontSize: fontSize.sm,

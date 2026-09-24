@@ -43,3 +43,7 @@ export const emitStatusUpdate = (orderId,status) => {
 export const emitBroadcast = (broadcastData) => {
     if (io) io.emit("broadcast_message", broadcastData);
 }
+
+export const emitStoreStatus = (statusData) => {
+    if (io) io.emit("store_status_changed", statusData);
+}
