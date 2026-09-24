@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { useCart } from '../contexts/CartContext';
@@ -30,7 +31,19 @@ const INSTRUCTIONS = [
 
 export default function CartScreen() {
   const navigation = useNavigation();
-  const { items, itemCount, subtotal, deliveryFee, packagingFee, addToCart, decrementItem, clearCart } = useCart();
+  const {
+    items,
+    itemCount,
+    subtotal,
+    deliveryFee,
+    packagingFee,
+    addToCart,
+    decrementItem,
+    removeItem,
+    removeUnavailableItems,
+    clearCart,
+    saveActiveOrder,
+  } = useCart();
   const { address, flatNo, landmark, phone, coords, isLocating, detectLocation, updateLocation } = useLocation();
   const { isAuthenticated } = useAuth();
 
@@ -39,6 +52,7 @@ export default function CartScreen() {
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeOffers, setActiveOffers] = useState([]);
+  const [liveProducts, setLiveProducts] = useState(null);
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editFlat, setEditFlat] = useState(flatNo || '');
@@ -46,9 +60,24 @@ export default function CartScreen() {
   const [editLandmark, setEditLandmark] = useState(landmark || '');
   const [editPhone, setEditPhone] = useState(phone || '');
 
+  const verifyLiveStock = useCallback(async () => {
+    try {
+      const res = await api.get('/products');
+      setLiveProducts(res.data?.data || []);
+    } catch (e) {
+    }
+  }, []);
+
   useEffect(() => {
     fetchActiveOffers();
-  }, []);
+    verifyLiveStock();
+  }, [verifyLiveStock]);
+
+  useFocusEffect(
+    useCallback(() => {
+      verifyLiveStock();
+    }, [verifyLiveStock])
+  );
 
   useEffect(() => {
     setEditFlat(flatNo || '');
@@ -104,6 +133,36 @@ export default function CartScreen() {
   const currentPackagingFee = packagingFee;
   const finalAmount = Math.max(0, subtotal - offerDiscount) + currentDeliveryFee + currentPackagingFee + selectedTip;
 
+  const getUnavailableStatus = (item) => {
+    if (!liveProducts) return null;
+    const matched = liveProducts.find((p) => (p._id?.toString?.() || p._id) === (item.productId?.toString?.() || item.productId));
+    if (!matched) {
+      return 'Item no longer available';
+    }
+    if (matched.isAvailable === false) {
+      return 'Out of stock';
+    }
+    if (matched.category?.productType === 'icecream') {
+      let isVarAvail = true;
+      if (Array.isArray(matched.availableVariants)) {
+        isVarAvail = matched.availableVariants.includes(item.variant);
+      } else if (matched.availableVariants && typeof matched.availableVariants === 'object') {
+        isVarAvail = matched.availableVariants[item.variant] !== false;
+      } else if (matched.variantAvailability && typeof matched.variantAvailability === 'object') {
+        isVarAvail = matched.variantAvailability[item.variant] !== false;
+      }
+      if (!isVarAvail) {
+        return `${item.variant.toUpperCase()} size out of stock`;
+      }
+    }
+    return null;
+  };
+
+  const unavailableKeys = liveProducts
+    ? items.filter((it) => Boolean(getUnavailableStatus(it))).map((it) => it.key)
+    : [];
+  const hasUnavailableItems = unavailableKeys.length > 0;
+
   const handleSaveAddress = async () => {
     if (!editStreet.trim()) {
       Alert.alert('Address Required', 'Please enter your street or area address.');
@@ -123,6 +182,14 @@ export default function CartScreen() {
 
   const handlePlaceOrder = async () => {
     if (items.length === 0) return;
+
+    if (hasUnavailableItems) {
+      Alert.alert(
+        'Out of Stock Items',
+        'Some items in your cart are currently out of stock. Please remove them before placing your order.'
+      );
+      return;
+    }
 
     if (!isAuthenticated) {
       Alert.alert(
@@ -159,6 +226,15 @@ export default function CartScreen() {
       });
 
       const order = confirmRes.data?.data;
+      if (order) {
+        saveActiveOrder({
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          status: order.status || order.orderStatus || 'placed',
+          itemsCount: orderItems.length,
+          total: order.pricing?.total ?? order.totalAmount ?? 0,
+        });
+      }
       clearCart();
 
       navigation.replace('OrderTracking', {
@@ -170,6 +246,7 @@ export default function CartScreen() {
         'Order Failed',
         err.response?.data?.message || err.message || 'Could not place your order. Please try again.'
       );
+      verifyLiveStock();
     } finally {
       setIsSubmitting(false);
     }
@@ -178,13 +255,20 @@ export default function CartScreen() {
   if (items.length === 0) {
     return (
       <SafeAreaView style={styles.emptyContainer}>
+        <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
         <View style={styles.emptyContent}>
           <Text style={styles.emptyEmoji}>🛒</Text>
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>Explore delicious natural ice creams and add your favorite scoops!</Text>
           <TouchableOpacity
             style={styles.browseButton}
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Main', { screen: 'Home' });
+              }
+            }}
             activeOpacity={0.85}
           >
             <Text style={styles.browseButtonText}>Browse Flavours</Text>
@@ -196,6 +280,7 @@ export default function CartScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={22} color={colors.text} />
@@ -269,35 +354,79 @@ export default function CartScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionHeading}>Items in Cart</Text>
-          {items.map((item) => (
-            <View key={item.key} style={styles.itemRow}>
-              <View style={styles.itemLeft}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemVariant}>
-                  {item.variant.toUpperCase()} • ₹{item.price} each
-                </Text>
-              </View>
 
-              <View style={styles.itemRight}>
-                <View style={styles.stepperContainer}>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
-                    onPress={() => decrementItem(item.productId, item.variant)}
-                  >
-                    <Ionicons name="remove" size={14} color={colors.white} />
-                  </TouchableOpacity>
-                  <Text style={styles.stepperValue}>{item.quantity}</Text>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
-                    onPress={() => addToCart({ _id: item.productId, name: item.name, categoryId: item.categoryId, categoryName: item.categoryName, appliedOffer: item.appliedOffer }, item.variant, item.price)}
-                  >
-                    <Ionicons name="add" size={14} color={colors.white} />
-                  </TouchableOpacity>
+          {hasUnavailableItems && (
+            <View style={styles.stockWarningBanner}>
+              <View style={styles.stockWarningLeft}>
+                <Ionicons name="alert-circle" size={18} color="#DC2626" />
+                <View style={styles.stockWarningTextCol}>
+                  <Text style={styles.stockWarningTitle}>Items Unavailable</Text>
+                  <Text style={styles.stockWarningSubtitle}>
+                    Some items went out of stock. Remove them to place order.
+                  </Text>
                 </View>
-                <Text style={styles.itemTotal}>₹{item.price * item.quantity}</Text>
               </View>
+              <TouchableOpacity
+                style={styles.removeUnavailableBtn}
+                onPress={() => removeUnavailableItems(unavailableKeys)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.removeUnavailableBtnText}>Remove All</Text>
+              </TouchableOpacity>
             </View>
-          ))}
+          )}
+
+          {items.map((item) => {
+            const unavailReason = getUnavailableStatus(item);
+            const isUnavail = Boolean(unavailReason);
+
+            return (
+              <View key={item.key} style={[styles.itemRow, isUnavail && styles.itemRowUnavailable]}>
+                <View style={styles.itemLeft}>
+                  <Text style={[styles.itemName, isUnavail && styles.dimmedText]}>{item.name}</Text>
+                  <Text style={[styles.itemVariant, isUnavail && styles.dimmedText]}>
+                    {item.variant.toUpperCase()} • ₹{item.price} each
+                  </Text>
+                  {isUnavail && (
+                    <View style={styles.outOfStockBadge}>
+                      <Ionicons name="alert-circle-outline" size={11} color="#DC2626" />
+                      <Text style={styles.outOfStockBadgeText}>{unavailReason}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.itemRight}>
+                  {isUnavail ? (
+                    <TouchableOpacity
+                      style={styles.singleRemoveBtn}
+                      onPress={() => removeItem(item.key)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={15} color="#DC2626" />
+                      <Text style={styles.singleRemoveText}>Remove</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.stepperContainer}>
+                      <TouchableOpacity
+                        style={styles.stepperButton}
+                        onPress={() => decrementItem(item.productId, item.variant)}
+                      >
+                        <Ionicons name="remove" size={14} color={colors.white} />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperValue}>{item.quantity}</Text>
+                      <TouchableOpacity
+                        style={styles.stepperButton}
+                        onPress={() => addToCart({ _id: item.productId, name: item.name, categoryId: item.categoryId, categoryName: item.categoryName, appliedOffer: item.appliedOffer }, item.variant, item.price)}
+                      >
+                        <Ionicons name="add" size={14} color={colors.white} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <Text style={[styles.itemTotal, isUnavail && styles.dimmedText]}>₹{item.price * item.quantity}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.sectionCard}>
@@ -465,13 +594,22 @@ export default function CartScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.placeOrderButton, isSubmitting && styles.disabledButton]}
-          onPress={handlePlaceOrder}
+          style={[
+            styles.placeOrderButton,
+            (isSubmitting || hasUnavailableItems) && styles.disabledButton,
+            hasUnavailableItems && styles.unavailablePlaceOrderButton,
+          ]}
+          onPress={hasUnavailableItems ? () => removeUnavailableItems(unavailableKeys) : handlePlaceOrder}
           disabled={isSubmitting}
           activeOpacity={0.85}
         >
           {isSubmitting ? (
             <ActivityIndicator size="small" color={colors.white} />
+          ) : hasUnavailableItems ? (
+            <>
+              <Text style={styles.placeOrderText}>Remove Out-of-Stock Items</Text>
+              <Ionicons name="trash-outline" size={16} color={colors.white} />
+            </>
           ) : (
             <>
               <Text style={styles.placeOrderText}>
@@ -1173,5 +1311,93 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '900',
     color: colors.white,
+  },
+  stockWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  stockWarningLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  stockWarningTextCol: {
+    flex: 1,
+  },
+  stockWarningTitle: {
+    fontSize: fontSize.xs,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  stockWarningSubtitle: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#B91C1C',
+    marginTop: 1,
+  },
+  removeUnavailableBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+  },
+  removeUnavailableBtnText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  itemRowUnavailable: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: radius.md,
+    padding: spacing.xs,
+    marginHorizontal: -spacing.xs,
+  },
+  dimmedText: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  outOfStockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  outOfStockBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  singleRemoveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  singleRemoveText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  unavailablePlaceOrderButton: {
+    backgroundColor: '#DC2626',
   },
 });

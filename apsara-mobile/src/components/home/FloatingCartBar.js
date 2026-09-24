@@ -1,36 +1,118 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 import { useCart } from '../../contexts/CartContext';
 
-export default function FloatingCartBar({ onPress }) {
-  const { itemCount, grandTotal } = useCart();
+const STATUS_TEXT = {
+  placed: 'Order Confirmed • Packing soon',
+  preparing: 'Packing in Cold Storage ❄️',
+  out_for_delivery: 'Out for Delivery 🛵',
+};
+
+export default function FloatingCartBar({ onPress, onTrackOrder, onDismiss }) {
+  const { itemCount, grandTotal, items, activeOrder } = useCart();
+
+  const isOrderActive = activeOrder && ['placed', 'preparing', 'out_for_delivery'].includes(activeOrder.status);
+
+  if (isOrderActive) {
+    const statusSubtitle = STATUS_TEXT[activeOrder.status] || 'Processing order';
+
+    const handleTrackPress = () => {
+      if (onTrackOrder) {
+        onTrackOrder(activeOrder);
+      }
+    };
+
+    return (
+      <View style={styles.container}>
+        <View style={[styles.card, styles.orderCard]}>
+          <TouchableOpacity
+            style={styles.leftSection}
+            onPress={handleTrackPress}
+            activeOpacity={0.85}
+          >
+            <View style={styles.pulseIconContainer}>
+              <Ionicons
+                name={activeOrder.status === 'out_for_delivery' ? 'bicycle' : 'snow'}
+                size={20}
+                color={colors.primary}
+              />
+              <View style={styles.pulseDot} />
+            </View>
+
+            <View style={styles.storeInfo}>
+              <View style={styles.orderTitleRow}>
+                <Text style={styles.orderTitle}>Order in Progress</Text>
+                <View style={styles.liveTag}>
+                  <Text style={styles.liveTagText}>LIVE</Text>
+                </View>
+              </View>
+              <Text style={styles.orderSubtitle} numberOfLines={1}>
+                {statusSubtitle}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.trackBtn}
+            onPress={handleTrackPress}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.trackBtnText}>Track</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (itemCount === 0) return null;
 
+  const firstItemImage = items[0]?.product?.imageUrl || items[0]?.imageUrl;
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.bar}
-        onPress={onPress}
-        activeOpacity={0.9}
-      >
-        <View style={styles.left}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="cart" size={18} color={colors.white} />
-          </View>
-          <View>
-            <Text style={styles.itemsCountText}>{itemCount} {itemCount === 1 ? 'ITEM' : 'ITEMS'}</Text>
-            <Text style={styles.totalText}>₹{grandTotal}</Text>
-          </View>
-        </View>
+      <View style={styles.card}>
+        <TouchableOpacity
+          style={styles.leftSection}
+          onPress={onPress}
+          activeOpacity={0.8}
+        >
+          {firstItemImage ? (
+            <Image source={{ uri: firstItemImage }} style={styles.thumbnail} resizeMode="cover" />
+          ) : (
+            <View style={styles.thumbnailFallback}>
+              <Text style={styles.thumbnailEmoji}>🍨</Text>
+            </View>
+          )}
 
-        <View style={styles.right}>
-          <Text style={styles.viewCartText}>View Cart</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.white} />
+          <View style={styles.storeInfo}>
+            <Text style={styles.storeName}>Apsara Handcrafted</Text>
+            <Text style={styles.viewMenuText}>View full cart</Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.rightSection}>
+          <TouchableOpacity
+            style={styles.checkoutBtn}
+            onPress={onPress}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.checkoutText}>Checkout</Text>
+            <View style={styles.checkoutDivider} />
+            <Text style={styles.checkoutMeta}>
+              {itemCount} {itemCount === 1 ? 'item' : 'items'} | ₹{grandTotal}
+            </Text>
+          </TouchableOpacity>
+
+          {onDismiss ? (
+            <TouchableOpacity style={styles.closeBtn} onPress={onDismiss} activeOpacity={0.7}>
+              <Ionicons name="close" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
-      </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -39,56 +121,178 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: spacing.lg,
-    left: spacing.lg,
-    right: spacing.lg,
+    left: spacing.md,
+    right: spacing.md,
     zIndex: 99,
   },
-  bar: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    shadowColor: colors.primaryDark,
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
   },
-  left: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+  orderCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    paddingVertical: 12,
   },
-  iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  pulseIconContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#E8F5F1',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    marginRight: 10,
   },
-  itemsCountText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: 'rgba(255,255,255,0.8)',
-    letterSpacing: 0.5,
+  pulseDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    borderWidth: 1.5,
+    borderColor: colors.white,
   },
-  totalText: {
-    fontSize: fontSize.md,
-    fontWeight: '900',
-    color: colors.white,
-  },
-  right: {
+  orderTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
-  viewCartText: {
-    fontSize: fontSize.sm,
+  orderTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  liveTag: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  liveTagText: {
+    fontSize: 8,
     fontWeight: '900',
     color: colors.white,
+    letterSpacing: 0.5,
+  },
+  orderSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  trackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+    gap: 4,
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  trackBtnText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.white,
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  thumbnail: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    marginRight: 10,
+  },
+  thumbnailFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  thumbnailEmoji: {
+    fontSize: 22,
+  },
+  storeInfo: {
+    flex: 1,
+  },
+  storeName: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  viewMenuText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
+    marginTop: 1,
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  checkoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: radius.full,
+    gap: 6,
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  checkoutText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.white,
+  },
+  checkoutDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  checkoutMeta: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.white,
+  },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

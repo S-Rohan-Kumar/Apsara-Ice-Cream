@@ -11,6 +11,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.apsara.icecream",
       "adaptiveIcon": {
         "backgroundColor": "#1B5E4B",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -23,6 +24,11 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ac3ad2f1-209c-45f1-9f67-374ffe9abb67"
+      }
+    }
   }
 }

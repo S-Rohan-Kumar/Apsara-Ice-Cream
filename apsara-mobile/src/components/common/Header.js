@@ -11,50 +11,56 @@ export default function Header({ onLocationPress, onProfilePress, onNotification
 
   return (
     <View style={styles.container}>
-      <View style={styles.leftSection}>
-        <View style={styles.deliveryBadge}>
-          <Ionicons name="flash" size={13} color="#FFFFFF" />
-          <Text style={styles.deliveryText}>15-20 MINS</Text>
-        </View>
-
+      <View style={styles.topRow}>
         <TouchableOpacity
-          style={styles.locationContainer}
+          style={styles.locationButton}
           onPress={onLocationPress}
-          activeOpacity={0.7}
+          activeOpacity={0.8}
         >
-          <View style={styles.locationRow}>
-            <Text style={styles.locationTitle}>{isAuthenticated ? addressType : 'Set Location'}</Text>
-            <Ionicons name="chevron-down" size={14} color={colors.text} style={styles.arrowIcon} />
+          <View style={styles.iconBadge}>
+            <Ionicons name="home" size={18} color="#1B5E4B" />
           </View>
-          <Text style={styles.locationSubtitle} numberOfLines={1}>
-            {address || 'Set Delivery Location'}
-          </Text>
+          <View style={styles.locationTextContainer}>
+            <View style={styles.titleRow}>
+              <Text style={styles.locationTitle}>
+                {isAuthenticated ? (addressType || 'My Home') : 'Select Location'}
+              </Text>
+              <Ionicons name="chevron-down" size={15} color={colors.white} style={styles.chevron} />
+            </View>
+            <Text style={styles.locationSubtitle} numberOfLines={1}>
+              {address || 'Set Delivery Address'}
+            </Text>
+          </View>
         </TouchableOpacity>
-      </View>
 
-      <View style={styles.rightSection}>
-        {onNotificationsPress ? (
+        <View style={styles.rightActions}>
+          {onNotificationsPress ? (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={onNotificationsPress}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="notifications-outline" size={22} color={colors.white} />
+              {hasBroadcasts ? <View style={styles.notificationDot} /> : null}
+            </TouchableOpacity>
+          ) : null}
+
           <TouchableOpacity
-            style={styles.bellButton}
-            onPress={onNotificationsPress}
-            activeOpacity={0.7}
+            style={styles.profileButton}
+            onPress={onProfilePress}
+            activeOpacity={0.8}
           >
-            <Ionicons name="notifications-outline" size={22} color={colors.text} />
-            {hasBroadcasts ? <View style={styles.notificationDot} /> : null}
+            {isAuthenticated ? (
+              <View style={styles.avatarCircle}>
+                <Ionicons name="person" size={16} color={colors.primary} />
+              </View>
+            ) : (
+              <View style={styles.loginBadge}>
+                <Text style={styles.loginBadgeText}>Log in</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        ) : null}
-
-        <TouchableOpacity
-          style={isAuthenticated ? styles.profileButton : styles.loginPill}
-          onPress={onProfilePress}
-          activeOpacity={0.7}
-        >
-          {isAuthenticated ? (
-            <Ionicons name="person-circle-outline" size={32} color={colors.primary} />
-          ) : (
-            <Text style={styles.loginPillText}>Log in</Text>
-          )}
-        </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -62,90 +68,104 @@ export default function Header({ onLocationPress, onProfilePress, onNotification
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+  },
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.white,
   },
-  leftSection: {
+  locationButton: {
     flex: 1,
-    marginRight: spacing.md,
-  },
-  deliveryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    marginBottom: 3,
+    marginRight: spacing.sm,
   },
-  deliveryText: {
-    color: colors.white,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginLeft: 3,
-  },
-  locationContainer: {
+  iconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
+    backgroundColor: '#FDE047',
+    alignItems: 'center',
     justifyContent: 'center',
+    marginRight: spacing.sm,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  locationRow: {
+  locationTextContainer: {
+    flex: 1,
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   locationTitle: {
     fontSize: fontSize.md,
-    fontWeight: '800',
-    color: colors.text,
+    fontWeight: '900',
+    color: colors.white,
+    letterSpacing: 0.2,
   },
-  arrowIcon: {
+  chevron: {
     marginLeft: 4,
     marginTop: 1,
   },
   locationSubtitle: {
     fontSize: fontSize.xs,
-    color: colors.textSecondary,
+    color: '#D1FAE5',
     marginTop: 1,
+    fontWeight: '500',
   },
-  rightSection: {
+  rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
   },
-  bellButton: {
+  actionButton: {
     position: 'relative',
-    padding: 6,
-    marginRight: spacing.xs,
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notificationDot: {
     position: 'absolute',
-    top: 5,
-    right: 5,
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E63946',
+    backgroundColor: '#EF4444',
     borderWidth: 1.5,
-    borderColor: colors.white,
+    borderColor: colors.primary,
   },
   profileButton: {
     padding: 2,
   },
-  loginPill: {
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primary,
+  avatarCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginBadge: {
+    backgroundColor: colors.white,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radius.full,
   },
-  loginPillText: {
+  loginBadgeText: {
     fontSize: fontSize.xs,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.primary,
   },
 });

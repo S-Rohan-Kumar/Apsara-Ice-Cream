@@ -5,10 +5,11 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
@@ -25,6 +26,7 @@ const STEPS = [
 export default function OrderTrackingScreen() {
   const route = useRoute();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { orderId, orderNumber } = route.params || {};
 
   const [order, setOrder] = useState(null);
@@ -75,9 +77,13 @@ export default function OrderTrackingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
+          style={styles.backButton}
+        >
           <Ionicons name="close" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
@@ -234,14 +240,22 @@ export default function OrderTrackingScreen() {
 
           <TouchableOpacity
             style={styles.doneBtn}
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => navigation.navigate('Main', { screen: 'Home' })}
             activeOpacity={0.85}
           >
             <Text style={styles.doneBtnText}>Back to Store</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.viewOrdersBtn}
+            onPress={() => navigation.navigate('Main', { screen: 'Orders' })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.viewOrdersBtnText}>View All Orders</Text>
+          </TouchableOpacity>
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -505,10 +519,24 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radius.md,
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.sm,
   },
   doneBtnText: {
     color: colors.white,
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+  },
+  viewOrdersBtn: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  viewOrdersBtnText: {
+    color: colors.text,
     fontSize: fontSize.sm,
     fontWeight: '800',
   },

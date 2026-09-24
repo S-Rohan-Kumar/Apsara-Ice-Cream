@@ -5,11 +5,12 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   Modal,
   Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
@@ -18,6 +19,7 @@ import { useLocation } from '../contexts/LocationContext';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { user, isAuthenticated, logout } = useAuth();
   const { address, addressType, phone, updateLocation, detectLocation, isLocating } = useLocation();
 
@@ -33,7 +35,8 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Account</Text>
       </View>
@@ -219,7 +222,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

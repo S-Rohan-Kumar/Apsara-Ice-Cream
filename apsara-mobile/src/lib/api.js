@@ -1,8 +1,12 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getBaseUrl = () => {
-  return 'https://apsara-ice-cream-cj1s.onrender.com/api';
+  if (Platform.OS === 'web') {
+    return 'https://apsara-ice-cream-cj1s.onrender.com/api';
+  }
+  return 'http://192.168.1.4:8000/api';
 };
 
 const api = axios.create({

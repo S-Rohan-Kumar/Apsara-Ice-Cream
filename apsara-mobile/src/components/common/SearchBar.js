@@ -4,15 +4,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 
 const PLACEHOLDERS = [
-  "Search 'Belgian Bite'...",
-  "Search 'Roasted Almond'...",
-  "Search 'Zero Sugar'...",
-  "Search 'Malai Kulfi'...",
-  "Search 'Mango Scoop'...",
-  "Search 'Guava Chilli'...",
+  "Search for 'Roasted Almond'...",
+  "Search for 'Belgian Chocolate'...",
+  "Search for 'Alphonso Mango'...",
+  "Search for 'Malai Kulfi'...",
+  "Search for 'Zero Sugar Guava'...",
+  "Search for 'Family Packs'...",
 ];
 
-export default function SearchBar({ value, onChangeText, onFocus, autoFocus = false, isButton = false, onPress }) {
+export default function SearchBar({
+  value,
+  onChangeText,
+  onFocus,
+  autoFocus = false,
+  isButton = false,
+  onPress,
+}) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -25,25 +32,29 @@ export default function SearchBar({ value, onChangeText, onFocus, autoFocus = fa
 
   if (isButton) {
     return (
-      <TouchableOpacity
-        style={styles.container}
-        onPress={onPress}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
-        <Text style={styles.buttonPlaceholder}>{PLACEHOLDERS[index]}</Text>
-        <Ionicons name="mic-outline" size={18} color={colors.primary} style={styles.micIcon} />
-      </TouchableOpacity>
+      <View style={styles.rowWrapper}>
+        <TouchableOpacity
+          style={styles.pillButton}
+          onPress={onPress}
+          activeOpacity={0.9}
+        >
+          <Ionicons name="search" size={18} color="#6B7280" style={styles.searchIcon} />
+          <Text style={styles.buttonPlaceholder} numberOfLines={1}>
+            {PLACEHOLDERS[index]}
+          </Text>
+          <Ionicons name="mic-outline" size={18} color={colors.primary} style={styles.micIcon} />
+        </TouchableOpacity>
+      </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
+    <View style={styles.inputContainer}>
+      <Ionicons name="search" size={18} color="#6B7280" style={styles.searchIcon} />
       <TextInput
         style={styles.input}
         placeholder={PLACEHOLDERS[index]}
-        placeholderTextColor={colors.textMuted}
+        placeholderTextColor="#9CA3AF"
         value={value}
         onChangeText={onChangeText}
         onFocus={onFocus}
@@ -52,7 +63,7 @@ export default function SearchBar({ value, onChangeText, onFocus, autoFocus = fa
       />
       {value ? (
         <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearButton}>
-          <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+          <Ionicons name="close-circle" size={18} color="#6B7280" />
         </TouchableOpacity>
       ) : (
         <Ionicons name="mic-outline" size={18} color={colors.primary} style={styles.micIcon} />
@@ -62,17 +73,39 @@ export default function SearchBar({ value, onChangeText, onFocus, autoFocus = fa
 }
 
 const styles = StyleSheet.create({
-  container: {
+  rowWrapper: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.primary,
+  },
+  pillButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     height: 44,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   searchIcon: {
     marginRight: spacing.sm,
@@ -86,12 +119,14 @@ const styles = StyleSheet.create({
   buttonPlaceholder: {
     flex: 1,
     fontSize: fontSize.sm,
-    color: colors.textMuted,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   micIcon: {
     marginLeft: spacing.sm,
   },
   clearButton: {
     marginLeft: spacing.sm,
+    padding: 2,
   },
 });

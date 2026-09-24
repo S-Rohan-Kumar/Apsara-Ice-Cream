@@ -38,99 +38,78 @@ export default function ProductCard({ product, onOpenVariants }) {
           <Image source={{ uri: product.imageUrl }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={styles.placeholder}>
-            <Text style={styles.placeholderEmoji}>🍦</Text>
+            <Text style={styles.placeholderEmoji}>🍨</Text>
           </View>
         )}
 
-        {product.isZeroSugar && (
-          <View style={styles.zeroSugarBadge}>
-            <Text style={styles.zeroSugarText}>Zero Sugar</Text>
-          </View>
-        )}
-
-        {showOfferBadge && (
-          <View style={styles.discountFloatingBadge}>
-            <Text style={styles.discountFloatingText}>
-              {product.appliedOffer.discountPercent}% OFF
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.content}>
-        <Text style={styles.categoryName} numberOfLines={1}>
-          {product.category?.name || 'Ice Cream'}
-        </Text>
-        <Text style={styles.productName} numberOfLines={2}>
-          {product.name}
-        </Text>
-
-        <View style={styles.sizeIndicatorRow}>
-          <Text style={styles.sizeIndicatorText}>
-            {isIceCream ? 'Multiple sizes' : 'Standard pack'}
-          </Text>
-          {isIceCream && (
-            <Ionicons name="chevron-down" size={11} color={colors.textSecondary} />
-          )}
+        <View style={styles.popularBadge}>
+          <Text style={styles.popularText}>Popular</Text>
         </View>
 
-        <View style={styles.bottomRow}>
-          <View style={styles.priceContainer}>
-            <View style={styles.priceRow}>
-              <Text style={styles.price}>
-                ₹{regularResolved}
-                {isIceCream ? '+' : ''}
-              </Text>
-              {hasDiscount && (
-                <Text style={styles.originalPrice}>
-                  ₹{regularBase}
-                </Text>
-              )}
-            </View>
-            {showOfferBadge && (
-              <Text style={styles.offerTagText} numberOfLines={1}>
-                {product.appliedOffer.title}
-              </Text>
-            )}
+        {showOfferBadge && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>{product.appliedOffer.discountPercent}% OFF</Text>
           </View>
+        )}
 
+        <View style={styles.floatingActionWrapper}>
           {totalQty > 0 ? (
             isIceCream ? (
               <TouchableOpacity
-                style={styles.customizedButton}
+                style={styles.customizedPill}
                 onPress={() => onOpenVariants(product)}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <Text style={styles.customizedQtyText}>{totalQty} in cart</Text>
+                <Text style={styles.customizedText}>{totalQty} in cart</Text>
                 <Ionicons name="pencil" size={10} color={colors.primary} />
               </TouchableOpacity>
             ) : (
-              <View style={styles.stepperContainer}>
+              <View style={styles.stepperPill}>
                 <TouchableOpacity
-                  style={styles.stepperButton}
+                  style={styles.stepperBtn}
                   onPress={() => decrementItem(product._id, 'regular')}
                 >
-                  <Ionicons name="remove" size={12} color={colors.white} />
+                  <Ionicons name="remove" size={14} color="#EC4899" />
                 </TouchableOpacity>
-                <Text style={styles.stepperValue}>{totalQty}</Text>
+                <Text style={styles.stepperNumber}>{totalQty}</Text>
                 <TouchableOpacity
-                  style={styles.stepperButton}
+                  style={styles.stepperBtn}
                   onPress={() => addToCart(product, 'regular', regularResolved)}
                 >
-                  <Ionicons name="add" size={12} color={colors.white} />
+                  <Ionicons name="add" size={14} color="#EC4899" />
                 </TouchableOpacity>
               </View>
             )
           ) : (
             <TouchableOpacity
-              style={styles.addButton}
+              style={styles.addCircleBtn}
               onPress={handleAddPress}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Text style={styles.addButtonText}>ADD</Text>
-              <Ionicons name="add" size={14} color={colors.primary} />
+              <Ionicons name="add" size={20} color="#EC4899" />
             </TouchableOpacity>
           )}
+        </View>
+      </View>
+
+      <View style={styles.details}>
+        <Text style={styles.storeName} numberOfLines={1}>
+          {product.category?.name || 'Apsara Natural'}
+        </Text>
+
+        <Text style={styles.title} numberOfLines={2}>
+          {product.name}
+        </Text>
+
+        <View style={styles.pricingRow}>
+          {hasDiscount && (
+            <Text style={styles.strikethroughPrice}>₹{regularBase}</Text>
+          )}
+          <View style={hasDiscount ? styles.discountedPriceBadge : styles.normalPriceBadge}>
+            <Text style={hasDiscount ? styles.discountedPriceText : styles.normalPriceText}>
+              ₹{regularResolved}{isIceCream ? '+' : ''}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -140,24 +119,22 @@ export default function ProductCard({ product, onOpenVariants }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
-    borderRadius: radius.lg,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.sm,
+    borderColor: '#F1F5F9',
     width: '48%',
     marginBottom: spacing.md,
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    overflow: 'hidden',
   },
   imageContainer: {
     width: '100%',
-    height: 110,
-    borderRadius: radius.md,
-    backgroundColor: colors.background,
-    overflow: 'hidden',
+    height: 125,
+    backgroundColor: '#F8FAFC',
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
@@ -171,149 +148,160 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   placeholderEmoji: {
-    fontSize: 42,
+    fontSize: 48,
   },
-  zeroSugarBadge: {
+  popularBadge: {
     position: 'absolute',
-    top: 6,
-    left: 6,
-    backgroundColor: '#059669',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: radius.full,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  zeroSugarText: {
+  popularText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#065F46',
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: radius.full,
+  },
+  discountText: {
     fontSize: 8,
     fontWeight: '900',
     color: colors.white,
     letterSpacing: 0.3,
   },
-  content: {
-    paddingTop: spacing.sm,
+  floatingActionWrapper: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
   },
-  categoryName: {
+  addCircleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: '#FCE7F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  stepperPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: '#FCE7F3',
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    gap: 6,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  stepperBtn: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperNumber: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.text,
+    minWidth: 14,
+    textAlign: 'center',
+  },
+  customizedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.white,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  customizedText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  details: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: 6,
+    paddingBottom: spacing.sm,
+  },
+  storeName: {
     fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 1,
   },
-  productName: {
-    fontSize: fontSize.sm,
+  title: {
+    fontSize: fontSize.xs + 1,
     fontWeight: '800',
     color: colors.text,
-    minHeight: 34,
-    marginTop: 2,
+    lineHeight: 16,
   },
-  sizeIndicatorRow: {
+  pricingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    marginTop: 2,
-    marginBottom: spacing.xs,
+    gap: 6,
+    marginTop: 3,
   },
-  sizeIndicatorText: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    fontWeight: '600',
+  strikethroughPrice: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
   },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.xs,
-  },
-  discountFloatingBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: '#DC2626',
+  discountedPriceBadge: {
+    backgroundColor: '#FCE7F3',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: radius.sm,
   },
-  discountFloatingText: {
-    fontSize: 8,
+  discountedPriceText: {
+    fontSize: 12,
     fontWeight: '900',
-    color: colors.white,
-    letterSpacing: 0.3,
+    color: '#BE185D',
   },
-  priceContainer: {
-    flex: 1,
+  normalPriceBadge: {
+    paddingVertical: 2,
   },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  price: {
-    fontSize: fontSize.md,
+  normalPriceText: {
+    fontSize: 13,
     fontWeight: '900',
     color: colors.text,
-  },
-  originalPrice: {
-    fontSize: 10,
-    color: colors.textMuted,
-    textDecorationLine: 'line-through',
-    fontWeight: '700',
-  },
-  offerTagText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: colors.primary,
-    marginTop: 1,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
-    borderRadius: radius.md,
-  },
-  addButtonText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.primary,
-  },
-  stepperContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingHorizontal: 2,
-    paddingVertical: 3,
-    gap: 4,
-  },
-  stepperButton: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperValue: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: colors.white,
-    minWidth: 12,
-    textAlign: 'center',
-  },
-  customizedButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    borderRadius: radius.md,
-  },
-  customizedQtyText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.primary,
   },
 });

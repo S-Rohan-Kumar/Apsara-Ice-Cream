@@ -5,12 +5,13 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -26,6 +27,7 @@ const STATUS_COLORS = {
 
 export default function OrdersScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
 
@@ -54,6 +56,12 @@ export default function OrdersScreen() {
     fetchOrders();
   }, [fetchOrders]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders();
+    }, [fetchOrders])
+  );
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrders();
@@ -72,7 +80,8 @@ export default function OrdersScreen() {
 
   if (!isAuthenticated) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyEmoji}>🔐</Text>
           <Text style={styles.emptyTitle}>Please log in</Text>
@@ -85,13 +94,21 @@ export default function OrdersScreen() {
             <Text style={styles.loginBtnText}>Log In</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
+          style={styles.headerBackBtn}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Your Orders</Text>
       </View>
 
@@ -189,7 +206,7 @@ export default function OrdersScreen() {
               <Text style={styles.emptySubtitle}>Order your first scoop of ice cream now!</Text>
               <TouchableOpacity
                 style={styles.loginBtn}
-                onPress={() => navigation.navigate('Home')}
+                onPress={() => navigation.navigate('Main', { screen: 'Home' })}
                 activeOpacity={0.85}
               >
                 <Text style={styles.loginBtnText}>Browse Store</Text>
@@ -198,7 +215,7 @@ export default function OrdersScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -208,11 +225,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+  },
+  headerBackBtn: {
+    marginRight: spacing.md,
+    padding: 2,
   },
   headerTitle: {
     fontSize: fontSize.lg,

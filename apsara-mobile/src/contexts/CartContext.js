@@ -5,6 +5,7 @@ const CartContext = createContext(null);
 
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState([]);
+  const [activeOrder, setActiveOrder] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -23,10 +24,53 @@ export const CartProvider = ({ children }) => {
       if (stored) {
         setItems(JSON.parse(stored));
       }
+      const storedOrder = await AsyncStorage.getItem('apsara_active_order');
+      if (storedOrder) {
+        setActiveOrder(JSON.parse(storedOrder));
+      }
     } catch (e) {
     } finally {
       setIsLoaded(true);
     }
+  };
+
+  const saveActiveOrder = (orderData) => {
+    setActiveOrder((prev) => {
+      if (!orderData && !prev) return null;
+      if (
+        orderData &&
+        prev &&
+        prev.orderId === orderData.orderId &&
+        prev.status === orderData.status &&
+        prev.total === orderData.total
+      ) {
+        return prev;
+      }
+      if (orderData) {
+        AsyncStorage.setItem('apsara_active_order', JSON.stringify(orderData)).catch(() => {});
+      } else {
+        AsyncStorage.removeItem('apsara_active_order').catch(() => {});
+      }
+      return orderData;
+    });
+  };
+
+  const updateActiveOrderStatus = (newStatus) => {
+    setActiveOrder((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, status: newStatus };
+      if (newStatus === 'delivered' || newStatus === 'cancelled') {
+        AsyncStorage.removeItem('apsara_active_order').catch(() => {});
+      } else {
+        AsyncStorage.setItem('apsara_active_order', JSON.stringify(updated)).catch(() => {});
+      }
+      return updated;
+    });
+  };
+
+  const clearActiveOrder = () => {
+    setActiveOrder(null);
+    AsyncStorage.removeItem('apsara_active_order').catch(() => {});
   };
 
   const getItemQuantity = (productId, variant = 'regular') => {
@@ -94,6 +138,11 @@ export const CartProvider = ({ children }) => {
     setItems((prev) => prev.filter((i) => i.key !== key));
   };
 
+  const removeUnavailableItems = (keys = []) => {
+    if (!keys || keys.length === 0) return;
+    setItems((prev) => prev.filter((i) => !keys.includes(i.key)));
+  };
+
   const clearCart = () => {
     setItems([]);
   };
@@ -113,11 +162,16 @@ export const CartProvider = ({ children }) => {
         deliveryFee,
         packagingFee,
         grandTotal,
+        activeOrder,
+        saveActiveOrder,
+        updateActiveOrderStatus,
+        clearActiveOrder,
         getItemQuantity,
         getProductTotalQuantity,
         addToCart,
         decrementItem,
         removeItem,
+        removeUnavailableItems,
         clearCart,
       }}
     >

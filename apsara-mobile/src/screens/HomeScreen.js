@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,15 +6,20 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
-  StatusBar,
+  TouchableOpacity,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import io from 'socket.io-client';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../lib/api';
 import { registerForPushNotificationsAsync } from '../lib/notifications';
+import { connectOrderSocket, leaveOrderSocket } from '../lib/socket';
 import { colors, spacing, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import { useCart } from '../contexts/CartContext';
 import Header from '../components/common/Header';
 import SearchBar from '../components/common/SearchBar';
 import BannerCarousel from '../components/home/BannerCarousel';
@@ -28,27 +33,34 @@ import LiveBroadcastBanner from '../components/common/LiveBroadcastBanner';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
+  const { activeOrder, updateActiveOrderStatus, saveActiveOrder } = useCart();
 
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [broadcasts, setBroadcasts] = useState([]);
-  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState(null);
+  const [dismissedBroadcastIds, setDismissedBroadcastIds] = useState([]);
   const [liveBroadcast, setLiveBroadcast] = useState(null);
   const [showAnnouncementsModal, setShowAnnouncementsModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [offers, setOffers] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState(null);
 
   const socketRef = useRef(null);
+  const flatListRef = useRef(null);
+  const activeOrderRef = useRef(activeOrder);
+  activeOrderRef.current = activeOrder;
 
   const fetchData = useCallback(async () => {
     try {
-      const [catsRes, prodsRes, bcastRes] = await Promise.allSettled([
+      const [catsRes, prodsRes, bcastRes, offersRes] = await Promise.allSettled([
         api.get('/categories'),
         api.get('/products'),
         api.get('/notifications/broadcasts'),
+        api.get('/offers/active'),
       ]);
 
       if (catsRes.status === 'fulfilled') {
@@ -60,6 +72,9 @@ export default function HomeScreen() {
       if (bcastRes.status === 'fulfilled') {
         setBroadcasts(bcastRes.value.data?.data || []);
       }
+      if (offersRes.status === 'fulfilled') {
+        setOffers(offersRes.value.data?.data || []);
+      }
     } catch (err) {
     } finally {
       setLoading(false);
@@ -67,8 +82,53 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const syncActiveOrderFromBackend = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await api.get('/orders/my');
+      const orderList = res.data?.data?.orders || res.data?.data || [];
+      if (orderList.length > 0) {
+        const latest = orderList[0];
+        const status = latest.status || latest.orderStatus || 'placed';
+        if (['placed', 'preparing', 'out_for_delivery'].includes(status)) {
+          saveActiveOrder({
+            orderId: latest._id,
+            orderNumber: latest.orderNumber,
+            status,
+            total: latest.pricing?.total ?? latest.totalAmount ?? 0,
+          });
+        } else if (activeOrderRef.current && (status === 'delivered' || status === 'cancelled')) {
+          updateActiveOrderStatus(status);
+        }
+      }
+    } catch (e) {
+    }
+  }, [isAuthenticated, saveActiveOrder, updateActiveOrderStatus]);
+
+  const loadDismissedBroadcasts = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@apsara_dismissed_broadcasts');
+      if (stored) {
+        setDismissedBroadcastIds(JSON.parse(stored));
+      }
+    } catch (e) {
+    }
+  }, []);
+
+  const handleDismissBroadcast = useCallback(async (broadcastId) => {
+    if (!broadcastId) return;
+    const idStr = broadcastId.toString();
+    setDismissedBroadcastIds((prev) => {
+      const next = prev.includes(idStr) ? prev : [...prev, idStr];
+      AsyncStorage.setItem('@apsara_dismissed_broadcasts', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
+    loadDismissedBroadcasts();
     fetchData();
+    syncActiveOrderFromBackend();
     registerForPushNotificationsAsync();
 
     const socketUrl = api.defaults.baseURL.replace(/\/api\/?$/, '');
@@ -79,8 +139,14 @@ export default function HomeScreen() {
     socketRef.current = socket;
 
     socket.on('broadcast_message', (msg) => {
-      setLiveBroadcast(msg);
-      setBroadcasts((prev) => [msg, ...prev.filter((b) => b._id !== msg._id)]);
+      const msgId = msg._id?.toString?.() || msg._id;
+      setDismissedBroadcastIds((currentDismissed) => {
+        if (!currentDismissed.includes(msgId)) {
+          setLiveBroadcast(msg);
+        }
+        return currentDismissed;
+      });
+      setBroadcasts((prev) => [msg, ...prev.filter((b) => (b._id?.toString?.() || b._id) !== msgId)]);
     });
 
     return () => {
@@ -88,7 +154,25 @@ export default function HomeScreen() {
         socket.disconnect();
       }
     };
-  }, [fetchData]);
+  }, [fetchData, loadDismissedBroadcasts]);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncActiveOrderFromBackend();
+    }, [syncActiveOrderFromBackend])
+  );
+
+  useEffect(() => {
+    if (!activeOrder?.orderId) return;
+
+    connectOrderSocket(activeOrder.orderId, (newStatus) => {
+      updateActiveOrderStatus(newStatus);
+    });
+
+    return () => {
+      leaveOrderSocket(activeOrder.orderId);
+    };
+  }, [activeOrder?.orderId]);
 
   useEffect(() => {
     if (!liveBroadcast) return;
@@ -101,6 +185,7 @@ export default function HomeScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+    syncActiveOrderFromBackend();
   };
 
   const filteredProducts = selectedCategory
@@ -108,42 +193,77 @@ export default function HomeScreen() {
     : products;
 
   const latestAnnouncement =
-    broadcasts.length > 0 && broadcasts[0]._id !== dismissedAnnouncementId
+    broadcasts.length > 0 &&
+    !dismissedBroadcastIds.includes(broadcasts[0]._id?.toString?.() || broadcasts[0]._id)
       ? broadcasts[0]
       : null;
 
-  const renderHeader = () => (
+  const activeCategoryName = selectedCategory
+    ? categories.find((c) => c._id === selectedCategory)?.name || 'Flavours'
+    : 'Fresh Handcrafted Scoops';
+
+  const handleBannerPress = useCallback((banner) => {
+    const targetCatId =
+      banner.categoryId ||
+      banner.category?._id ||
+      (typeof banner.category === 'string' ? banner.category : null);
+
+    if (targetCatId) {
+      setSelectedCategory(targetCatId);
+      flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
+      return;
+    }
+
+    const titleLower = (banner.title || '').toLowerCase();
+    if (banner.code === 'ZEROSUGAR' || titleLower.includes('zero')) {
+      const zeroCat = categories.find((c) => c.name.toLowerCase().includes('zero'));
+      if (zeroCat) {
+        setSelectedCategory(zeroCat._id);
+        flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
+        return;
+      }
+    }
+
+    if (titleLower.includes('fruit')) {
+      const fruitCat = categories.find((c) => c.name.toLowerCase().includes('fruit'));
+      if (fruitCat) {
+        setSelectedCategory(fruitCat._id);
+        flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
+        return;
+      }
+    }
+
+    if (titleLower.includes('kulfi')) {
+      const kulfiCat = categories.find((c) => c.name.toLowerCase().includes('kulfi'));
+      if (kulfiCat) {
+        setSelectedCategory(kulfiCat._id);
+        flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
+        return;
+      }
+    }
+
+    setSelectedCategory(null);
+    flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
+  }, [categories]);
+
+  const renderProductItem = useCallback(({ item }) => (
+    <ProductCard
+      product={item}
+      onOpenVariants={(p) => setSelectedProductForVariants(p)}
+    />
+  ), []);
+
+  const listHeaderComponent = useMemo(() => (
     <View>
-      <Header
-        onLocationPress={() => navigation.navigate(isAuthenticated ? 'Profile' : 'Login')}
-        onProfilePress={() => navigation.navigate(isAuthenticated ? 'Profile' : 'Login')}
-        onNotificationsPress={() => setShowAnnouncementsModal(true)}
-        hasBroadcasts={broadcasts.length > 0}
-      />
-
-      <SearchBar
-        isButton={true}
-        onPress={() => navigation.navigate('Search')}
-      />
-
       {latestAnnouncement ? (
         <AnnouncementCard
           announcement={latestAnnouncement}
           onOpenAll={() => setShowAnnouncementsModal(true)}
-          onDismiss={() => setDismissedAnnouncementId(latestAnnouncement._id)}
+          onDismiss={() => handleDismissBroadcast(latestAnnouncement._id)}
         />
       ) : null}
 
-      <BannerCarousel
-        onBannerPress={(b) => {
-          if (b.code === 'ZEROSUGAR') {
-            const zeroCat = categories.find((c) =>
-              c.name.toLowerCase().includes('zero')
-            );
-            if (zeroCat) setSelectedCategory(zeroCat._id);
-          }
-        }}
-      />
+      <BannerCarousel offers={offers} onBannerPress={handleBannerPress} />
 
       <CategoryChips
         categories={categories}
@@ -152,28 +272,53 @@ export default function HomeScreen() {
       />
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          {selectedCategory
-            ? categories.find((c) => c._id === selectedCategory)?.name || 'Flavours'
-            : 'All Ice Creams & Flavours'}
-        </Text>
-        <Text style={styles.sectionCount}>{filteredProducts.length} items</Text>
+        <View>
+          <Text style={styles.sectionTitle}>{activeCategoryName}</Text>
+          <Text style={styles.sectionSubtitle}>100% Pure Milk & Natural Flavours</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.seeAllBtn}
+          onPress={() => setSelectedCategory(null)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.seeAllText}>See All</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+        </TouchableOpacity>
       </View>
     </View>
-  );
+  ), [latestAnnouncement, offers, handleBannerPress, categories, selectedCategory, activeCategoryName, handleDismissBroadcast]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+    <View style={styles.screen}>
+      <StatusBar style="light" backgroundColor={colors.primary} translucent={false} />
+
+      <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+        <Header
+          onLocationPress={() => navigation.navigate(isAuthenticated ? 'Profile' : 'Login')}
+          onProfilePress={() => navigation.navigate(isAuthenticated ? 'Profile' : 'Login')}
+          onNotificationsPress={() => setShowAnnouncementsModal(true)}
+          hasBroadcasts={broadcasts.length > 0}
+        />
+
+        <SearchBar
+          isButton={true}
+          onPress={() => navigation.navigate('Search')}
+        />
+      </View>
 
       {liveBroadcast ? (
         <LiveBroadcastBanner
           broadcast={liveBroadcast}
           onPress={() => {
+            handleDismissBroadcast(liveBroadcast._id);
             setLiveBroadcast(null);
             setShowAnnouncementsModal(true);
           }}
-          onDismiss={() => setLiveBroadcast(null)}
+          onDismiss={() => {
+            handleDismissBroadcast(liveBroadcast._id);
+            setLiveBroadcast(null);
+          }}
         />
       ) : null}
 
@@ -184,18 +329,14 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={filteredProducts}
           keyExtractor={(item) => item._id}
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={renderHeader}
-          renderItem={({ item }) => (
-            <ProductCard
-              product={item}
-              onOpenVariants={(p) => setSelectedProductForVariants(p)}
-            />
-          )}
+          ListHeaderComponent={listHeaderComponent}
+          renderItem={renderProductItem}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -206,15 +347,23 @@ export default function HomeScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>🍦</Text>
-              <Text style={styles.emptyTitle}>No products found</Text>
+              <Text style={styles.emptyEmoji}>🍨</Text>
+              <Text style={styles.emptyTitle}>No flavours found</Text>
               <Text style={styles.emptySubtitle}>Check back soon for freshly churned batches</Text>
             </View>
           }
         />
       )}
 
-      <FloatingCartBar onPress={() => navigation.navigate('Cart')} />
+      <FloatingCartBar
+        onPress={() => navigation.navigate('Cart')}
+        onTrackOrder={(ord) =>
+          navigation.navigate('OrderTracking', {
+            orderId: ord.orderId,
+            orderNumber: ord.orderNumber,
+          })
+        }
+      />
 
       <VariantSelectorModal
         visible={!!selectedProductForVariants}
@@ -227,17 +376,20 @@ export default function HomeScreen() {
         onClose={() => setShowAnnouncementsModal(false)}
         broadcasts={broadcasts}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
+  headerContainer: {
+    backgroundColor: colors.primary,
+  },
   listContent: {
-    paddingBottom: 90,
+    paddingBottom: 115,
   },
   columnWrapper: {
     justifyContent: 'space-between',
@@ -248,18 +400,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
   sectionTitle: {
-    fontSize: fontSize.md,
+    fontSize: fontSize.md + 1,
     fontWeight: '900',
     color: colors.text,
   },
-  sectionCount: {
-    fontSize: fontSize.xs,
+  sectionSubtitle: {
+    fontSize: 11,
     color: colors.textMuted,
-    fontWeight: '700',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 4,
+  },
+  seeAllText: {
+    fontSize: fontSize.xs,
+    fontWeight: '800',
+    color: colors.primary,
   },
   centered: {
     flex: 1,

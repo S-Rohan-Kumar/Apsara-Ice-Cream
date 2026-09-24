@@ -5,10 +5,11 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
@@ -18,6 +19,7 @@ import api from '../lib/api';
 
 export default function LoginModal() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { login, updateUser } = useAuth();
   const { updateLocation, address, addressType } = useLocation();
 
@@ -113,7 +115,8 @@ export default function LoginModal() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
           <Ionicons name="close" size={24} color={colors.text} />
@@ -258,7 +261,7 @@ export default function LoginModal() {
           </View>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

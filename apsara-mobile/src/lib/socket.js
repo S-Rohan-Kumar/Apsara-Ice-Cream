@@ -3,9 +3,9 @@ import { Platform } from 'react-native';
 
 const getSocketUrl = () => {
   if (Platform.OS === 'web') {
-    return 'http://localhost:8000';
+    return 'https://apsara-ice-cream-cj1s.onrender.com';
   }
-  return 'http://192.168.1.6:8000';
+  return 'http://192.168.1.4:8000';
 };
 
 const socket = io(getSocketUrl(), {
