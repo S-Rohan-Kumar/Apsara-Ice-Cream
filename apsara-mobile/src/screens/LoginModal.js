@@ -32,6 +32,9 @@ export default function LoginModal() {
   const [timer, setTimer] = useState(45);
   const [loading, setLoading] = useState(false);
 
+  const [pendingAuth, setPendingAuth] = useState(null);
+  const verifyingRef = React.useRef(false);
+
   useEffect(() => {
     let interval;
     if (step === 'otp' && timer > 0) {
@@ -64,13 +67,15 @@ export default function LoginModal() {
   };
 
   const handleVerifyOtp = async (inputCode = otp) => {
-    const codeToVerify = inputCode.trim();
+    if (loading || verifyingRef.current) return;
+    const codeToVerify = (inputCode || '').toString().trim();
     if (codeToVerify.length !== 6) {
       Alert.alert('Invalid OTP', 'Please enter the complete 6-digit verification code');
       return;
     }
 
     try {
+      verifyingRef.current = true;
       setLoading(true);
       const res = await api.post('/auth/verify-otp', {
         phone: phoneNumber,
@@ -79,12 +84,19 @@ export default function LoginModal() {
 
       const { accessToken, user, isNewUser } = res.data?.data || {};
       if (accessToken && user) {
-        await login(accessToken, user);
-        await updateLocation(address, addressType, user.phone || ('+91' + phoneNumber));
+        const needsName =
+          Boolean(isNewUser) ||
+          !user.name ||
+          typeof user.name !== 'string' ||
+          user.name.trim() === '' ||
+          user.name.trim().toLowerCase() === 'apsara customer';
 
-        if (isNewUser || !user.name || user.name.trim() === '') {
+        if (needsName) {
+          setPendingAuth({ accessToken, user });
           setStep('name');
         } else {
+          await login(accessToken, user);
+          await updateLocation(address, addressType, user.phone || ('+91' + phoneNumber));
           navigation.goBack();
         }
       } else {
@@ -93,6 +105,7 @@ export default function LoginModal() {
     } catch (err) {
       Alert.alert('Verification Failed', err.response?.data?.message || 'Could not verify OTP. Try again.');
     } finally {
+      verifyingRef.current = false;
       setLoading(false);
     }
   };
@@ -105,8 +118,24 @@ export default function LoginModal() {
 
     try {
       setLoading(true);
-      await api.patch('/auth/update-profile', { name: name.trim() });
-      await updateUser({ name: name.trim() });
+      const trimmedName = name.trim();
+      const currentToken = pendingAuth?.accessToken;
+      const currentUser = pendingAuth?.user;
+
+      if (currentToken) {
+        await api.patch(
+          '/auth/update-profile',
+          { name: trimmedName },
+          { headers: { Authorization: `Bearer ${currentToken}` } }
+        );
+        const completeUser = { ...currentUser, name: trimmedName };
+        await login(currentToken, completeUser);
+        await updateLocation(address, addressType, completeUser.phone || ('+91' + phoneNumber));
+      } else {
+        await api.patch('/auth/update-profile', { name: trimmedName });
+        await updateUser({ name: trimmedName });
+      }
+
       navigation.goBack();
     } catch (err) {
       Alert.alert('Update Failed', err.response?.data?.message || 'Could not save name');

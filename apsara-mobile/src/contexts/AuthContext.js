@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../lib/api';
+import { syncFcmTokenWithBackend, unregisterPushNotificationsAsync } from '../lib/notifications';
 
 const AuthContext = createContext(null);
 
@@ -20,6 +21,7 @@ export const AuthProvider = ({ children }) => {
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
+        syncFcmTokenWithBackend().catch(() => {});
         try {
           const { data } = await api.get('/auth/me');
           if (data?.data) {
@@ -39,9 +41,11 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
     await AsyncStorage.setItem('user_token', newToken);
     await AsyncStorage.setItem('user_data', JSON.stringify(userData));
+    syncFcmTokenWithBackend().catch(() => {});
   };
 
   const logout = async () => {
+    unregisterPushNotificationsAsync().catch(() => {});
     setToken(null);
     setUser(null);
     await AsyncStorage.removeItem('user_token');

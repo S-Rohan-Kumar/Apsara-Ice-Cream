@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.apsara.icecream",
+      "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#F5F6F1",
@@ -22,7 +23,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1B5E4B"
+        }
+      ]
     ],
     "extra": {
       "eas": {

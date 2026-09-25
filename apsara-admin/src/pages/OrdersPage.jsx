@@ -28,7 +28,8 @@ export function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const { showSuccess, showError } = useToast();
 
-  const [updateOrderStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation();
+  const [updateOrderStatus] = useUpdateOrderStatusMutation();
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
   const knownOrdersRef = useRef(new Set());
   const initialLoadRef = useRef(true);
@@ -116,10 +117,13 @@ export function OrdersPage() {
 
   const handleAdvanceStatus = async (orderId, orderNumber, nextStatus) => {
     try {
+      setUpdatingOrderId(orderId);
       await updateOrderStatus({ id: orderId, status: nextStatus }).unwrap();
       showSuccess(`Order ${orderNumber || ''} moved to ${nextStatus.replace(/_/g, ' ')}!`);
     } catch (err) {
       showError(err?.data?.message || 'Could not update order status');
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -365,10 +369,20 @@ export function OrdersPage() {
                     {order.status !== 'delivered' && order.status !== 'cancelled' ? (
                       <button
                         onClick={() => handleAdvanceStatus(order._id, order.orderNumber, nextStatus)}
-                        disabled={isUpdating}
-                        className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-sm active:scale-[0.99] disabled:opacity-50 ${btnClass}`}
+                        disabled={updatingOrderId === order._id}
+                        className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-sm active:scale-[0.99] disabled:opacity-75 flex items-center justify-center gap-2 ${btnClass}`}
                       >
-                        {actionLabel}
+                        {updatingOrderId === order._id ? (
+                          <>
+                            <svg className='w-3.5 h-3.5 animate-spin' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                              <circle cx='12' cy='10' r='10'></circle>
+                              <path d='M12 2a10 10 0 0 1 10 10'></path>
+                            </svg>
+                            <span>Updating...</span>
+                          </>
+                        ) : (
+                          actionLabel
+                        )}
                       </button>
                     ) : (
                       <div className='w-full py-2 text-center text-xs font-bold text-emerald-800 bg-emerald-50 rounded-xl border border-emerald-200'>

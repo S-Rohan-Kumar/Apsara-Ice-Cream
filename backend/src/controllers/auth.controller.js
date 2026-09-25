@@ -150,6 +150,11 @@ const saveFcmToken = asyncHandler(async (req, res) => {
   if (!token) throw new APIError(400, "Device push token is required");
 
   const isExpo = token.startsWith("ExponentPushToken") || token.startsWith("ExpoPushToken");
+  await User.updateMany(
+    { fcmToken: token, _id: { $ne: req.user._id } },
+    { $set: { fcmToken: null, pushToken: null } }
+  );
+
   await User.findByIdAndUpdate(req.user._id, {
     $set: {
       fcmToken: token,
