@@ -14,7 +14,8 @@ if (!isExpoGo && Platform.OS !== 'web') {
     Notifications = require('expo-notifications');
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
       }),
@@ -48,13 +49,11 @@ export const registerForPushNotificationsAsync = async () => {
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#1B4332',
-        sound: 'default',
       });
 
       await Notifications.setNotificationChannelAsync('store_broadcasts', {
         name: 'Store Announcements',
         importance: Notifications.AndroidImportance.HIGH,
-        sound: 'default',
       });
     }
 

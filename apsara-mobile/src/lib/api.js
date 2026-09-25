@@ -4,9 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getBaseUrl = () => {
   if (Platform.OS === 'web') {
-    return 'http://localhost:8000/api';
+    return 'https://apsara-ice-cream-cj1s.onrender.com/api';
   }
-  return 'http://192.168.1.4:8000/api';
+  return 'https://apsara-ice-cream-cj1s.onrender.com/api';
 };
 
 const api = axios.create({
@@ -14,7 +14,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 45000,
 });
 
 api.interceptors.request.use(async (config) => {
