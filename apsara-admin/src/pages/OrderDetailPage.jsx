@@ -50,8 +50,8 @@ export default function OrderDetailPage() {
   const handleWhatsAppDelivery = () => {
     if (!order) return;
     const text = getDeliveryBoyMessage(order);
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   if (isLoading) return <Spinner />;
@@ -72,7 +72,8 @@ export default function OrderDetailPage() {
   const nextStatuses = STATUS_TRANSITIONS[order.status] || [];
   const currentStep = STEPS.indexOf(order.status);
   const displayOrderNum = order.orderNumber || `#${order._id.slice(-4).toUpperCase()}`;
-  const cleanPhone = (order.customer?.phone || order.delivery?.phone || '').replace(/[^0-9]/g, '');
+  const rawDigits = (order.customer?.phone || order.delivery?.phone || '').replace(/[^0-9]/g, '');
+  const cleanPhone = rawDigits.length === 10 ? `91${rawDigits}` : rawDigits;
   const deliveryBoyText = getDeliveryBoyMessage(order);
 
   return (
@@ -321,7 +322,7 @@ export default function OrderDetailPage() {
                       <span>Call Customer</span>
                     </a>
                     <a
-                      href={`https://wa.me/${cleanPhone}`}
+                      href={`https://api.whatsapp.com/send?phone=${cleanPhone}`}
                       target='_blank'
                       rel='noopener noreferrer'
                       className='flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold border border-emerald-200'
