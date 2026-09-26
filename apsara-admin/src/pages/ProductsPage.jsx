@@ -180,7 +180,10 @@ function SnoozeModal({ product, variant, onClose }) {
   const [snoozeProduct, { isLoading }] = useSnoozeProductMutation();
   const { showSuccess, showError } = useToast();
   const [dateMode, setDateMode] = useState(false);
-  const [startsAt, setStartsAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [startsAt, setStartsAt] = useState(() => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
   const [expiresAt, setExpiresAt] = useState('');
 
   const handleSnooze = async (hours) => {

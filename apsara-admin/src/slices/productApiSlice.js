@@ -76,10 +76,10 @@ export const productApiSlice = apiSlice.injectEndpoints({
     }),
 
     snoozeProduct: builder.mutation({
-      query: ({ id, hours, variant }) => ({
+      query: ({ id, ...body }) => ({
         url   : `${PRODUCTS_URL}/${id}/snooze`,
         method: 'PATCH',
-        body  : { hours, variant },
+        body,
       }),
       transformResponse: (res) => res.data,
       invalidatesTags: ['Product'],

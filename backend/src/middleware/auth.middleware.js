@@ -13,16 +13,11 @@ const authMiddleware = async (req, res, next) => {
                 .json({ success: false, message: "No token provided" });
         }
 
-        console.log(`This is header : ${header}`);
-
         const token = header.split(" ")[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         const sessionKey = `session:${decoded._id}`;
         let sessionData;
-
-        console.log(`This is token : ${token}`);
-        console.log(decoded);
 
         try {
             const cached = await redis.get(sessionKey);
@@ -40,12 +35,10 @@ const authMiddleware = async (req, res, next) => {
             );
             const tokenAge = Math.floor(Date.now() / 1000) - decoded.iat;
             if (tokenAge > 300) {
-                return res
-                    .status(503)
-                    .json({
-                        success: false,
-                        message: "Auth service temporarily unavailable",
-                    });
+                return res.status(503).json({
+                    success: false,
+                    message: "Auth service temporarily unavailable",
+                });
             }
             sessionData = { _id: decoded._id, role: decoded.role };
         }
