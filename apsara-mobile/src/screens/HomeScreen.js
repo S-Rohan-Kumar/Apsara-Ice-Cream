@@ -7,16 +7,18 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import io from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../lib/api';
 import { registerForPushNotificationsAsync } from '../lib/notifications';
-import { connectOrderSocket, leaveOrderSocket } from '../lib/socket';
+import socket, { connectOrderSocket, leaveOrderSocket } from '../lib/socket';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -27,9 +29,12 @@ import CategoryChips from '../components/home/CategoryChips';
 import ProductCard from '../components/home/ProductCard';
 import VariantSelectorModal from '../components/common/VariantSelectorModal';
 import FloatingCartBar from '../components/home/FloatingCartBar';
-import AnnouncementCard from '../components/home/AnnouncementCard';
 import AnnouncementsModal from '../components/common/AnnouncementsModal';
-import LiveBroadcastBanner from '../components/common/LiveBroadcastBanner';
+import AnnouncementCard from '../components/home/AnnouncementCard';
+
+if (Platform.OS === 'android' && !global?.nativeFabricUIManager && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -41,7 +46,6 @@ export default function HomeScreen() {
   const [products, setProducts] = useState([]);
   const [broadcasts, setBroadcasts] = useState([]);
   const [dismissedBroadcastIds, setDismissedBroadcastIds] = useState([]);
-  const [liveBroadcast, setLiveBroadcast] = useState(null);
   const [showAnnouncementsModal, setShowAnnouncementsModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [offers, setOffers] = useState(null);
@@ -51,7 +55,6 @@ export default function HomeScreen() {
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   const [storeNotice, setStoreNotice] = useState('');
 
-  const socketRef = useRef(null);
   const flatListRef = useRef(null);
   const activeOrderRef = useRef(activeOrder);
   activeOrderRef.current = activeOrder;
@@ -128,42 +131,71 @@ export default function HomeScreen() {
     syncActiveOrderFromBackend();
     registerForPushNotificationsAsync();
 
-    const socketUrl = api.defaults.baseURL.replace(/\/api\/?$/, '');
-    const socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-    });
-    socketRef.current = socket;
-
-    socket.on('broadcast_message', (msg) => {
-      const msgId = msg._id?.toString?.() || msg._id;
-      setDismissedBroadcastIds((currentDismissed) => {
-        if (!currentDismissed.includes(msgId)) {
-          setLiveBroadcast(msg);
+    const handleOffersUpdated = () => {
+      Promise.allSettled([
+        api.get('/offers/active'),
+        api.get('/products'),
+      ]).then(([offersRes, prodsRes]) => {
+        if (offersRes.status === 'fulfilled' && offersRes.value.data?.data) {
+          setOffers([...offersRes.value.data.data]);
         }
-        return currentDismissed;
-      });
-      setBroadcasts((prev) => [msg, ...prev.filter((b) => (b._id?.toString?.() || b._id) !== msgId)]);
-    });
+        if (prodsRes.status === 'fulfilled' && prodsRes.value.data?.data) {
+          setProducts(prodsRes.value.data.data);
+        }
+      }).catch(() => {});
+    };
 
-    socket.on('store_status_changed', (statusData) => {
+    const handleProductsUpdated = () => {
+      api.get('/products')
+        .then((res) => {
+          if (res.data?.data) {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setProducts(res.data.data);
+          }
+        })
+        .catch(() => {});
+    };
+
+    const handleStoreStatusChanged = (statusData) => {
       if (statusData) {
         setIsStoreOpen(statusData.isStoreOpen ?? true);
         if (statusData.closedNotice) setStoreNotice(statusData.closedNotice);
       }
-    });
+    };
+
+    const handleBroadcastMessage = (msg) => {
+      const msgId = msg._id?.toString?.() || msg._id;
+      setBroadcasts((prev) => [msg, ...prev.filter((b) => (b._id?.toString?.() || b._id) !== msgId)]);
+    };
+
+    const handleSocketConnect = () => {
+      fetchData();
+    };
+
+    socket.on('connect', handleSocketConnect);
+    socket.on('offers_updated', handleOffersUpdated);
+    socket.on('products_updated', handleProductsUpdated);
+    socket.on('store_status_changed', handleStoreStatusChanged);
+    socket.on('broadcast_message', handleBroadcastMessage);
+
+    if (!socket.connected) {
+      socket.connect();
+    }
 
     return () => {
-      if (socket) {
-        socket.disconnect();
-      }
+      socket.off('connect', handleSocketConnect);
+      socket.off('offers_updated', handleOffersUpdated);
+      socket.off('products_updated', handleProductsUpdated);
+      socket.off('store_status_changed', handleStoreStatusChanged);
+      socket.off('broadcast_message', handleBroadcastMessage);
     };
   }, [fetchData, loadDismissedBroadcasts]);
 
   useFocusEffect(
     useCallback(() => {
       syncActiveOrderFromBackend();
-    }, [syncActiveOrderFromBackend])
+      fetchData();
+    }, [syncActiveOrderFromBackend, fetchData])
   );
 
   useEffect(() => {
@@ -182,14 +214,6 @@ export default function HomeScreen() {
     };
   }, [activeOrder?.orderId, syncActiveOrderFromBackend, updateActiveOrderStatus]);
 
-  useEffect(() => {
-    if (!liveBroadcast) return;
-    const timer = setTimeout(() => {
-      setLiveBroadcast(null);
-    }, 10000);
-    return () => clearTimeout(timer);
-  }, [liveBroadcast]);
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
@@ -200,17 +224,35 @@ export default function HomeScreen() {
     ? products.filter((p) => p.category?._id === selectedCategory)
     : products;
 
-  const latestAnnouncement =
-    broadcasts.length > 0 &&
-    !dismissedBroadcastIds.includes(broadcasts[0]._id?.toString?.() || broadcasts[0]._id)
-      ? broadcasts[0]
-      : null;
+  const smoothTransition = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 600,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        springDamping: 0.9,
+      },
+      delete: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+    });
+  }, []);
 
   const activeCategoryName = selectedCategory
     ? categories.find((c) => c._id === selectedCategory)?.name || 'Flavours'
     : 'Fresh Handcrafted Scoops';
 
+  const handleSelectCategory = useCallback((catId) => {
+    smoothTransition();
+    setSelectedCategory(catId);
+  }, [smoothTransition]);
+
   const handleBannerPress = useCallback((banner) => {
+    smoothTransition();
     const targetCatId =
       banner.categoryId ||
       banner.category?._id ||
@@ -252,7 +294,7 @@ export default function HomeScreen() {
 
     setSelectedCategory(null);
     flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
-  }, [categories]);
+  }, [categories, smoothTransition]);
 
   const renderProductItem = useCallback(({ item }) => (
     <ProductCard
@@ -263,20 +305,12 @@ export default function HomeScreen() {
 
   const listHeaderComponent = useMemo(() => (
     <View>
-      {latestAnnouncement ? (
-        <AnnouncementCard
-          announcement={latestAnnouncement}
-          onOpenAll={() => setShowAnnouncementsModal(true)}
-          onDismiss={() => handleDismissBroadcast(latestAnnouncement._id)}
-        />
-      ) : null}
-
       <BannerCarousel offers={offers} onBannerPress={handleBannerPress} />
 
       <CategoryChips
         categories={categories}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={handleSelectCategory}
       />
 
       <View style={styles.sectionHeader}>
@@ -287,7 +321,10 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.seeAllBtn}
-          onPress={() => setSelectedCategory(null)}
+          onPress={() => {
+            smoothTransition();
+            setSelectedCategory(null);
+          }}
           activeOpacity={0.7}
         >
           <Text style={styles.seeAllText}>See All</Text>
@@ -295,7 +332,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
     </View>
-  ), [latestAnnouncement, offers, handleBannerPress, categories, selectedCategory, activeCategoryName, handleDismissBroadcast]);
+  ), [offers, handleBannerPress, categories, selectedCategory, activeCategoryName, handleSelectCategory, smoothTransition]);
 
   return (
     <View style={styles.screen}>
@@ -324,21 +361,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {liveBroadcast ? (
-        <LiveBroadcastBanner
-          broadcast={liveBroadcast}
-          onPress={() => {
-            handleDismissBroadcast(liveBroadcast._id);
-            setLiveBroadcast(null);
-            setShowAnnouncementsModal(true);
-          }}
-          onDismiss={() => {
-            handleDismissBroadcast(liveBroadcast._id);
-            setLiveBroadcast(null);
-          }}
-        />
-      ) : null}
-
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -354,6 +376,11 @@ export default function HomeScreen() {
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={listHeaderComponent}
           renderItem={renderProductItem}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          updateCellsBatchingPeriod={50}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -431,25 +458,27 @@ const styles = StyleSheet.create({
   columnWrapper: {
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
+    gap: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: fontSize.md + 1,
+    fontSize: fontSize.md + 2,
     fontWeight: '900',
     color: colors.text,
+    letterSpacing: 0.2,
   },
   sectionSubtitle: {
-    fontSize: 11,
+    fontSize: 11.5,
     color: colors.textMuted,
     fontWeight: '600',
-    marginTop: 1,
+    marginTop: 2,
   },
   seeAllBtn: {
     flexDirection: 'row',

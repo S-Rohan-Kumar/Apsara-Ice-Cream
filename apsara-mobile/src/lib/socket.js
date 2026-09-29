@@ -2,14 +2,14 @@ import { io } from 'socket.io-client';
 import { Platform } from 'react-native';
 
 const getSocketUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'https://apsara-ice-cream-cj1s.onrender.com';
-  }
   return 'https://apsara-ice-cream-cj1s.onrender.com';
 };
 
 const socket = io(getSocketUrl(), {
-  autoConnect: false,
+  autoConnect: true,
+  reconnection: true,
+  reconnectionDelay: 2000,
+  reconnectionAttempts: Infinity,
   transports: ['websocket', 'polling'],
 });
 

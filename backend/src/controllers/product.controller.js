@@ -10,6 +10,7 @@ import {
     cancelProductReEnable,
 } from "../queues/stock.queue.js";
 import { invalidate } from "../middleware/cache.middleware.js";
+import { emitProductsUpdated } from "../socket/socket.js";
 
 const ICECREAM_VARIANTS = ["small", "regular", "large", "binge", "shareIt"];
 const ICECREAM_NO_SHARE_VARIANTS = ["small", "regular", "large", "binge"];
@@ -241,6 +242,7 @@ const createProduct = asyncHandler(async (req, res) => {
         sortOrder: sortOrder || 0,
     });
 
+    emitProductsUpdated({ action: 'created', productId: product._id });
     return res
         .status(201)
         .json(new APIResponse(201, product, "Product created"));
@@ -272,6 +274,7 @@ const updateProduct = asyncHandler(async (req, res) => {
     }
 
     await product.save();
+    emitProductsUpdated({ action: 'updated', productId: product._id });
     return res
         .status(200)
         .json(new APIResponse(200, product, "Product updated"));
@@ -306,6 +309,7 @@ const updateVariantAvailability = asyncHandler(async (req, res) => {
     product.isAvailable = variants.some((v) => product.variantAvailability[v]);
 
     await product.save();
+    emitProductsUpdated({ action: 'stock_updated', productId: product._id });
 
     return res.status(200).json(
         new APIResponse(
@@ -337,6 +341,7 @@ const toggleStock = asyncHandler(async (req, res) => {
 
     product.isAvailable = !product.isAvailable;
     await product.save();
+    emitProductsUpdated({ action: 'stock_updated', productId: product._id });
 
     return res
         .status(200)
@@ -356,6 +361,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 
     product.isActive = false;
     await product.save();
+    emitProductsUpdated({ action: 'deleted', productId: product._id });
 
     return res
         .status(200)
@@ -423,6 +429,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
 
             await scheduleProductReEnable(product._id, delayMs, variant);
             await invalidate("products", "products_all");
+            emitProductsUpdated({ action: 'snooze_updated', productId: product._id });
 
             return res.status(200).json(
                 new APIResponse(
@@ -448,6 +455,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
 
             await cancelProductReEnable(product._id, variant);
             await invalidate("products", "products_all");
+            emitProductsUpdated({ action: 'snooze_updated', productId: product._id });
 
             return res.status(200).json(
                 new APIResponse(
@@ -471,6 +479,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
 
             await cancelProductReEnable(product._id, variant);
             await invalidate("products", "products_all");
+            emitProductsUpdated({ action: 'snooze_updated', productId: product._id });
 
             return res.status(200).json(
                 new APIResponse(
@@ -498,6 +507,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
 
         await scheduleProductReEnable(product._id, delayMs);
         await invalidate("products", "products_all");
+        emitProductsUpdated({ action: 'snooze_updated', productId: product._id });
 
         return res.status(200).json(
             new APIResponse(
@@ -518,6 +528,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
 
         await cancelProductReEnable(product._id);
         await invalidate("products", "products_all");
+        emitProductsUpdated({ action: 'snooze_updated', productId: product._id });
 
         return res.status(200).json(
             new APIResponse(
@@ -560,6 +571,7 @@ const snoozeProduct = asyncHandler(async (req, res) => {
 
         await cancelProductReEnable(product._id);
         await invalidate("products", "products_all");
+        emitProductsUpdated({ action: 'snooze_updated', productId: product._id });
 
         return res.status(200).json(
             new APIResponse(

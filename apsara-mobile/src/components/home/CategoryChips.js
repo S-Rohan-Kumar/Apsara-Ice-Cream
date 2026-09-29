@@ -45,8 +45,10 @@ export default function CategoryChips({ categories = [], selectedCategory, onSel
           onPress={() => onSelectCategory(null)}
           activeOpacity={0.8}
         >
-          <View style={[styles.avatarBox, styles.allAvatarBox]}>
-            <Text style={styles.avatarEmoji}>🍨</Text>
+          <View style={styles.imageWrapper}>
+            <View style={[styles.avatarBox, styles.allAvatarBox, !selectedCategory && styles.avatarBoxActive]}>
+              <Text style={styles.avatarEmoji}>🍨</Text>
+            </View>
           </View>
           <Text
             style={[styles.categoryLabel, !selectedCategory && styles.categoryLabelActive]}
@@ -71,13 +73,13 @@ export default function CategoryChips({ categories = [], selectedCategory, onSel
               activeOpacity={0.8}
             >
               <View style={styles.imageWrapper}>
-                {cat.imageUrl ? (
-                  <Image source={{ uri: cat.imageUrl }} style={styles.categoryImage} resizeMode="cover" />
-                ) : (
-                  <View style={styles.avatarBox}>
+                <View style={[styles.avatarBox, isSelected && styles.avatarBoxActive]}>
+                  {cat.imageUrl ? (
+                    <Image source={{ uri: cat.imageUrl }} style={styles.categoryImage} resizeMode="cover" />
+                  ) : (
                     <Text style={styles.avatarEmoji}>{meta.emoji}</Text>
-                  </View>
-                )}
+                  )}
+                </View>
 
                 <View style={styles.fromBadge}>
                   <Text style={styles.fromBadgeText}>FROM {meta.from}</Text>
@@ -100,15 +102,19 @@ export default function CategoryChips({ categories = [], selectedCategory, onSel
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    gap: spacing.md,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 18,
   },
   card: {
     alignItems: 'center',
-    width: 68,
+    width: 72,
+    paddingTop: 4,
   },
   cardActive: {
     transform: [{ scale: 1.04 }],
@@ -117,60 +123,69 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   avatarBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  avatarBoxActive: {
+    borderColor: colors.primary,
+    borderWidth: 2.5,
+    backgroundColor: '#E8F5F1',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 3,
   },
   allAvatarBox: {
-    backgroundColor: '#E8F5F1',
-    borderColor: '#A7F3D0',
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#DCFCE7',
   },
   categoryImage: {
-    width: 58,
-    height: 58,
+    width: '100%',
+    height: '100%',
     borderRadius: 18,
   },
   avatarEmoji: {
-    fontSize: 28,
+    fontSize: 30,
   },
   fromBadge: {
     position: 'absolute',
-    bottom: -6,
+    bottom: 0,
     alignSelf: 'center',
     backgroundColor: '#EC4899',
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: radius.full,
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 3,
+    zIndex: 10,
   },
   fromBadgeText: {
-    fontSize: 8,
+    fontSize: 8.5,
     fontWeight: '900',
     color: colors.white,
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   categoryLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 10,
+    marginTop: 6,
     width: '100%',
   },
   categoryLabelActive: {

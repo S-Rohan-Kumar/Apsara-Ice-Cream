@@ -139,7 +139,8 @@ export default function BannerCarousel({ offers, onBannerPress }) {
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,

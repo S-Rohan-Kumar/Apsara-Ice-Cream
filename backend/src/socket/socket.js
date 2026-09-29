@@ -47,3 +47,11 @@ export const emitBroadcast = (broadcastData) => {
 export const emitStoreStatus = (statusData) => {
     if (io) io.emit("store_status_changed", statusData);
 }
+
+export const emitOffersUpdated = (offersData) => {
+    if (io) io.emit("offers_updated", offersData || {});
+}
+
+export const emitProductsUpdated = (productData) => {
+    if (io) io.emit("products_updated", productData || {});
+}

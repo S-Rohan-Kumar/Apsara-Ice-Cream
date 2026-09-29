@@ -2,6 +2,7 @@ import Offer from '../models/offer.model.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { APIResponse } from '../utils/api-response.js';
 import { APIError } from '../utils/api-error.js';
+import { emitOffersUpdated } from '../socket/socket.js';
 
 // GET /api/offers/active
 const getActiveOffers = asyncHandler(async (req, res) => {
@@ -52,6 +53,7 @@ const createOffer = asyncHandler(async (req, res) => {
     createdBy      : req.user._id,
   });
 
+  emitOffersUpdated({ action: 'created', offer });
   return res.status(201).json(new APIResponse(201, offer, 'Offer created'));
 });
 
@@ -69,6 +71,7 @@ const updateOffer = asyncHandler(async (req, res) => {
   });
 
   await offer.save();
+  emitOffersUpdated({ action: 'updated', offer });
   return res.status(200).json(new APIResponse(200, offer, 'Offer updated'));
 });
 
@@ -76,6 +79,7 @@ const updateOffer = asyncHandler(async (req, res) => {
 const deleteOffer = asyncHandler(async (req, res) => {  
   const offer = await Offer.findByIdAndDelete(req.params.id);
   if (!offer) throw new APIError(404, 'Offer not found');
+  emitOffersUpdated({ action: 'deleted', id: req.params.id });
   return res.status(200).json(new APIResponse(200, null, 'Offer deleted'));
 });
 

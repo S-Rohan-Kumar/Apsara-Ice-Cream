@@ -1,11 +1,32 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 import { useCart } from '../../contexts/CartContext';
 
 export default function ProductCard({ product, onOpenVariants }) {
   const { getProductTotalQuantity, getItemQuantity, addToCart, decrementItem } = useCart();
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const imageOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 650,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
+  const handleImageLoad = () => {
+    Animated.timing(imageOpacity, {
+      toValue: 1,
+      duration: 500,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  };
 
   const isIceCream = product.category?.productType === 'icecream';
   const totalQty = isIceCream
@@ -32,10 +53,30 @@ export default function ProductCard({ product, onOpenVariants }) {
   };
 
   return (
-    <View style={styles.card}>
+    <Animated.View
+      style={[
+        styles.card,
+        {
+          opacity: fadeAnim,
+          transform: [
+            {
+              translateY: fadeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [16, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
       <View style={styles.imageContainer}>
         {product.imageUrl ? (
-          <Image source={{ uri: product.imageUrl }} style={styles.image} resizeMode="cover" />
+          <Animated.Image
+            source={{ uri: product.imageUrl }}
+            style={[styles.image, { opacity: imageOpacity }]}
+            onLoad={handleImageLoad}
+            resizeMode="cover"
+          />
         ) : (
           <View style={styles.placeholder}>
             <Text style={styles.placeholderEmoji}>🍨</Text>
@@ -112,7 +153,7 @@ export default function ProductCard({ product, onOpenVariants }) {
           </View>
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
