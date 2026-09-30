@@ -1,19 +1,48 @@
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import { View, StyleSheet, Text, Animated, Easing } from 'react-native';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme';
+
+const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
+
+const fetchRoadRoute = async (fromLat, fromLng, toLat, toLng) => {
+  try {
+    const url = `${OSRM_BASE}/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url, { timeout: 8000 });
+    const json = await res.json();
+    if (json.code === 'Ok' && json.routes?.length > 0) {
+      const route = json.routes[0];
+      const coords = route.geometry.coordinates.map(([lng, lat]) => ({
+        latitude: lat,
+        longitude: lng,
+      }));
+      return {
+        coords,
+        distanceMeters: route.distance,
+        durationSeconds: route.duration,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
   {
     storeLocation = { lat: 13.0033, lng: 77.6834, title: 'Apsara KR Puram Store' },
     customerLocation,
     riderLocation,
+    onRouteUpdate,
   },
   ref
 ) {
   const mapRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const [riderToCustomerRoute, setRiderToCustomerRoute] = useState([]);
+  const [storeToRiderRoute, setStoreToRiderRoute] = useState([]);
 
   const customerLat = customerLocation?.lat || 12.9985;
   const customerLng = customerLocation?.lng || 77.6780;
@@ -33,6 +62,35 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
     longitudeDelta: Math.max(0.025, Math.abs(storeLocation.lng - customerLng) * 1.8),
   };
 
+  const loadRoutes = useCallback(async () => {
+    const [riderRoute, storeRoute] = await Promise.all([
+      fetchRoadRoute(currentRiderLat, currentRiderLng, customerLat, customerLng),
+      fetchRoadRoute(storeLocation.lat, storeLocation.lng, currentRiderLat, currentRiderLng),
+    ]);
+
+    if (riderRoute?.coords?.length > 0) {
+      setRiderToCustomerRoute(riderRoute.coords);
+      if (onRouteUpdate) {
+        onRouteUpdate({
+          distanceKm: Number((riderRoute.distanceMeters / 1000).toFixed(1)),
+          etaMinutes: Math.ceil(riderRoute.durationSeconds / 60),
+        });
+      }
+    } else {
+      setRiderToCustomerRoute([riderCoords, customerCoords]);
+    }
+
+    if (storeRoute?.coords?.length > 0) {
+      setStoreToRiderRoute(storeRoute.coords);
+    } else {
+      setStoreToRiderRoute([storeCoords, riderCoords]);
+    }
+  }, [currentRiderLat, currentRiderLng, customerLat, customerLng]);
+
+  useEffect(() => {
+    loadRoutes();
+  }, [loadRoutes]);
+
   useImperativeHandle(ref, () => ({
     recenter: () => {
       mapRef.current?.animateToRegion(
@@ -46,7 +104,8 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
       );
     },
     fitBounds: () => {
-      mapRef.current?.fitToCoordinates([storeCoords, riderCoords, customerCoords], {
+      const allCoords = [storeCoords, riderCoords, customerCoords];
+      mapRef.current?.fitToCoordinates(allCoords, {
         edgePadding: { top: 90, right: 50, bottom: 250, left: 50 },
         animated: true,
       });
@@ -100,22 +159,36 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
         rotateEnabled={false}
       >
         <UrlTile
-          urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maximumZ={19}
+          urlTemplate="https://tile.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png"
+          maximumZ={20}
           minimumZ={0}
           flipY={false}
           zIndex={0}
           tileSize={256}
         />
 
-        <Polyline
-          coordinates={[storeCoords, riderCoords, customerCoords]}
-          strokeColor="#1B5E4B"
-          strokeWidth={5}
-          zIndex={1}
-        />
+        {storeToRiderRoute.length > 1 && (
+          <Polyline
+            coordinates={storeToRiderRoute}
+            strokeColor="#94A3B8"
+            strokeWidth={4}
+            lineDashPattern={[8, 6]}
+            zIndex={1}
+          />
+        )}
 
-        <Marker coordinate={storeCoords} anchor={{ x: 0.5, y: 0.5 }} title="Apsara Store" zIndex={2}>
+        {riderToCustomerRoute.length > 1 && (
+          <Polyline
+            coordinates={riderToCustomerRoute}
+            strokeColor="#1B5E4B"
+            strokeWidth={5}
+            lineCap="round"
+            lineJoin="round"
+            zIndex={2}
+          />
+        )}
+
+        <Marker coordinate={storeCoords} anchor={{ x: 0.5, y: 0.5 }} title="Apsara Store" zIndex={3}>
           <View style={styles.storeMarkerWrap}>
             <View style={styles.storePin}>
               <Text style={styles.pinEmoji}>🏪</Text>
@@ -126,7 +199,7 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
           </View>
         </Marker>
 
-        <Marker coordinate={customerCoords} anchor={{ x: 0.5, y: 0.5 }} title="Delivery Destination" zIndex={2}>
+        <Marker coordinate={customerCoords} anchor={{ x: 0.5, y: 0.5 }} title="Delivery Destination" zIndex={3}>
           <View style={styles.customerMarkerWrap}>
             <View style={styles.customerPin}>
               <Text style={styles.pinEmoji}>🏠</Text>
@@ -143,7 +216,7 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
           title="Apsara Express Partner"
           flat={true}
           rotation={riderHeading}
-          zIndex={3}
+          zIndex={4}
         >
           <View style={styles.riderMarkerWrap}>
             <Animated.View

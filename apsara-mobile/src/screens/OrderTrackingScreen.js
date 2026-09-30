@@ -71,6 +71,7 @@ export default function OrderTrackingScreen() {
   const [currentStatus, setCurrentStatus] = useState('placed');
   const [riderLocation, setRiderLocation] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [routeInfo, setRouteInfo] = useState(null);
 
   const mapRef = useRef(null);
   const sheetHeight = useRef(new Animated.Value(SNAP_COLLAPSED)).current;
@@ -211,6 +212,7 @@ export default function OrderTrackingScreen() {
             lng: customerLng,
           }}
           riderLocation={riderLocation}
+          onRouteUpdate={setRouteInfo}
         />
       </View>
 
@@ -271,8 +273,10 @@ export default function OrderTrackingScreen() {
                 {currentStatus === 'delivered'
                   ? 'Delivered 🎉'
                   : currentStatus === 'out_for_delivery'
-                  ? riderDistance
-                    ? `${riderDistance} km away • ~${Math.max(3, Math.round(riderDistance * 3.5))} mins`
+                  ? routeInfo
+                    ? `${routeInfo.distanceKm} km away • ~${routeInfo.etaMinutes} mins`
+                    : riderDistance
+                    ? `${riderDistance} km away`
                     : 'Rider is on the way!'
                   : currentStatus === 'preparing'
                   ? 'Arriving in 15-20 Mins'
