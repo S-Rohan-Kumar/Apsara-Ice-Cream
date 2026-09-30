@@ -16,17 +16,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
 import api from '../lib/api';
-import { connectOrderSocket, leaveOrderSocket, connectRiderTracking, leaveRiderTracking } from '../lib/socket';
+import {
+  connectOrderSocket,
+  leaveOrderSocket,
+  connectRiderTracking,
+  leaveRiderTracking,
+} from '../lib/socket';
 import LiveDeliveryMap from '../components/tracking/LiveDeliveryMap';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SNAP_COLLAPSED = 168;
-const SNAP_EXPANDED = Math.round(SCREEN_HEIGHT * 0.82);
+const SNAP_COLLAPSED = 175;
+const SNAP_EXPANDED = Math.round(SCREEN_HEIGHT * 0.78);
 
 const MANDYA_STORE_LOCATION = {
   lat: 13.0033,
   lng: 77.6834,
-  title: 'Apsara Testing Store (KR Puram, Bengaluru)',
+  title: 'Apsara KR Puram Store',
 };
 
 const DEFAULT_CUSTOMER_LOCATION = {
@@ -50,7 +55,7 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
 };
 
 const STEPS = [
-  { key: 'placed', label: 'Order Confirmed', desc: 'Received at store', icon: 'checkmark-circle' },
+  { key: 'placed', label: 'Order Confirmed', desc: 'Received at store hub', icon: 'checkmark-circle' },
   { key: 'preparing', label: 'Packing in Cold Storage', desc: 'Sub-zero insulated dry ice pack', icon: 'snow' },
   { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Rider on the way to you', icon: 'bicycle' },
   { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh ice cream!', icon: 'ice-cream' },
@@ -112,6 +117,8 @@ export default function OrderTrackingScreen() {
   useEffect(() => {
     loadOrderDetails();
 
+    if (!orderId) return;
+
     connectOrderSocket(orderId, (newStatus) => {
       setCurrentStatus(newStatus);
     });
@@ -136,6 +143,7 @@ export default function OrderTrackingScreen() {
   }, [orderId]);
 
   const loadOrderDetails = async () => {
+    if (!orderId) return;
     try {
       const res = await api.get(`/orders/${orderId}`);
       if (res.data?.data) {
@@ -180,7 +188,7 @@ export default function OrderTrackingScreen() {
           order.delivery.address.city,
           order.delivery.address.pincode,
         ].filter(Boolean).join(', ')
-    : 'Address details provided with order';
+    : 'Customer Delivery Address on Record';
 
   const handleCallPartner = () => {
     Linking.openURL('tel:+919876543210').catch(() => {});
@@ -203,7 +211,6 @@ export default function OrderTrackingScreen() {
             lng: customerLng,
           }}
           riderLocation={riderLocation}
-          containerStyle={styles.fullscreenMap}
         />
       </View>
 
@@ -233,13 +240,22 @@ export default function OrderTrackingScreen() {
         </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.floatingRecenterBtn, { bottom: SNAP_COLLAPSED + 16 }]}
-        onPress={handleRecenter}
-        activeOpacity={0.85}
+      <Animated.View
+        style={[
+          styles.floatingRecenterBtnWrap,
+          {
+            bottom: Animated.add(sheetHeight, 16),
+          },
+        ]}
       >
-        <Ionicons name="locate" size={22} color={colors.primary} />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.floatingRecenterBtn}
+          onPress={handleRecenter}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="locate" size={22} color={colors.primary} />
+        </TouchableOpacity>
+      </Animated.View>
 
       <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
         <View {...panResponder.panHandlers} style={styles.sheetHandleZone}>
@@ -256,7 +272,7 @@ export default function OrderTrackingScreen() {
                   ? 'Delivered 🎉'
                   : currentStatus === 'out_for_delivery'
                   ? riderDistance
-                    ? `${riderDistance} km away • ~${Math.max(3, Math.round(riderDistance * 3))} mins`
+                    ? `${riderDistance} km away • ~${Math.max(3, Math.round(riderDistance * 3.5))} mins`
                     : 'Rider is on the way!'
                   : currentStatus === 'preparing'
                   ? 'Arriving in 15-20 Mins'
@@ -337,9 +353,7 @@ export default function OrderTrackingScreen() {
             <View style={styles.telemetryDivider} />
             <View style={styles.telemetryItem}>
               <Text style={styles.telemetryLabel}>GPS FEED</Text>
-              <Text style={[styles.telemetryValue, { color: riderLocation ? '#16A34A' : '#F59E0B' }]}>
-                {riderLocation ? '🟢 Active' : '🟡 Standby'}
-              </Text>
+              <Text style={[styles.telemetryValue, { color: '#16A34A' }]}>🟢 Active</Text>
             </View>
           </View>
 
@@ -449,15 +463,6 @@ export default function OrderTrackingScreen() {
                 <Text style={styles.summaryBreakdownValue}>₹{order.pricing?.packagingFee ?? 5}</Text>
               </View>
 
-              <View style={styles.summaryBreakdownRow}>
-                <Text style={styles.summaryBreakdownLabel}>Payment Mode</Text>
-                <Text style={[styles.summaryBreakdownValue, order.payment?.method === 'online' && styles.summaryDiscountValue]}>
-                  {order.payment?.method === 'online' ? '🟢 UPI / Online Paid' : '💵 Cash on Delivery'}
-                </Text>
-              </View>
-
-              <View style={styles.divider} />
-
               <View style={styles.summaryTotalRow}>
                 <Text style={styles.summaryTotalLabel}>
                   {order.payment?.method === 'online' ? 'Total Paid' : 'To Pay on Delivery'}
@@ -497,12 +502,7 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     ...StyleSheet.absoluteFillObject,
-  },
-  fullscreenMap: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 0,
-    borderWidth: 0,
+    flex: 1,
   },
   floatingHeader: {
     position: 'absolute',
@@ -567,9 +567,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: 0.5,
   },
-  floatingRecenterBtn: {
+  floatingRecenterBtnWrap: {
     position: 'absolute',
     right: spacing.lg,
+    zIndex: 20,
+  },
+  floatingRecenterBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -581,7 +584,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 8,
     elevation: 6,
-    zIndex: 20,
   },
   bottomSheet: {
     position: 'absolute',
@@ -650,7 +652,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -659,29 +661,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8FAF9',
     borderRadius: radius.md,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    gap: 8,
   },
   riderAvatarContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    marginRight: 10,
   },
   avatarVerifiedBadge: {
     position: 'absolute',
     bottom: -1,
     right: -1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#16A34A',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#10B981',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -693,20 +694,20 @@ const styles = StyleSheet.create({
   riderNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   riderName: {
     fontSize: fontSize.xs + 1,
-    fontWeight: '900',
+    fontWeight: '800',
     color: colors.text,
   },
   ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
     paddingVertical: 1,
-    borderRadius: radius.sm,
+    borderRadius: 4,
     gap: 2,
   },
   ratingText: {
@@ -716,8 +717,8 @@ const styles = StyleSheet.create({
   },
   riderSubtext: {
     fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 1,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   callPartnerBtn: {
     width: 34,
@@ -836,7 +837,6 @@ const styles = StyleSheet.create({
     width: 2,
     flex: 1,
     backgroundColor: '#E2E8F0',
-    marginVertical: 2,
   },
   connectorLinePassed: {
     backgroundColor: colors.primary,
@@ -895,7 +895,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   summaryItemName: {
     fontSize: fontSize.xs,
@@ -927,24 +927,26 @@ const styles = StyleSheet.create({
   },
   summaryBreakdownValue: {
     fontSize: fontSize.xs,
-    fontWeight: '700',
     color: colors.text,
+    fontWeight: '700',
   },
   summaryDiscountLabel: {
     fontSize: fontSize.xs,
     color: colors.primary,
-    fontWeight: '700',
   },
   summaryDiscountValue: {
     fontSize: fontSize.xs,
-    fontWeight: '800',
     color: colors.primary,
+    fontWeight: '800',
   },
   summaryTotalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 4,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
   },
   summaryTotalLabel: {
     fontSize: fontSize.sm,

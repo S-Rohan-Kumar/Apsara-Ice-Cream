@@ -1,46 +1,19 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { View, StyleSheet, Text, Animated, Easing } from 'react-native';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
-
-const MAP_STYLE = [
-  {
-    featureType: 'poi',
-    elementType: 'labels',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'transit',
-    elementType: 'labels',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry',
-    stylers: [{ lightness: 15 }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry',
-    stylers: [{ color: '#E0F2FE' }],
-  },
-  {
-    featureType: 'landscape.man_made',
-    elementType: 'geometry',
-    stylers: [{ color: '#F8FAFC' }],
-  },
-];
+import { colors } from '../../theme';
 
 const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
   {
     storeLocation = { lat: 13.0033, lng: 77.6834, title: 'Apsara KR Puram Store' },
     customerLocation,
     riderLocation,
-    containerStyle,
   },
   ref
 ) {
   const mapRef = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const customerLat = customerLocation?.lat || 12.9985;
   const customerLng = customerLocation?.lng || 77.6780;
@@ -56,8 +29,8 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
   const initialRegion = {
     latitude: (storeLocation.lat + customerLat) / 2,
     longitude: (storeLocation.lng + customerLng) / 2,
-    latitudeDelta: Math.max(0.02, Math.abs(storeLocation.lat - customerLat) * 1.6),
-    longitudeDelta: Math.max(0.02, Math.abs(storeLocation.lng - customerLng) * 1.6),
+    latitudeDelta: Math.max(0.025, Math.abs(storeLocation.lat - customerLat) * 1.8),
+    longitudeDelta: Math.max(0.025, Math.abs(storeLocation.lng - customerLng) * 1.8),
   };
 
   useImperativeHandle(ref, () => ({
@@ -66,19 +39,38 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
         {
           latitude: currentRiderLat,
           longitude: currentRiderLng,
-          latitudeDelta: 0.015,
-          longitudeDelta: 0.015,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
         },
         500
       );
     },
     fitBounds: () => {
       mapRef.current?.fitToCoordinates([storeCoords, riderCoords, customerCoords], {
-        edgePadding: { top: 90, right: 50, bottom: 240, left: 50 },
+        edgePadding: { top: 90, right: 50, bottom: 250, left: 50 },
         animated: true,
       });
     },
   }));
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.25,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulseAnim]);
 
   useEffect(() => {
     if (riderLocation?.lat && riderLocation?.lng) {
@@ -86,7 +78,7 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
         {
           center: { latitude: riderLocation.lat, longitude: riderLocation.lng },
           heading: riderHeading,
-          pitch: 15,
+          pitch: 0,
         },
         { duration: 600 }
       );
@@ -94,27 +86,36 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
   }, [riderLocation?.lat, riderLocation?.lng, riderHeading]);
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={styles.container}>
       <MapView
         ref={mapRef}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         style={styles.map}
         initialRegion={initialRegion}
-        customMapStyle={MAP_STYLE}
+        mapType="none"
         showsCompass={false}
         showsTraffic={false}
-        showsBuildings={true}
-        loadingEnabled={true}
-        loadingIndicatorColor="#1B5E4B"
-        loadingBackgroundColor="#F8FAF9"
+        showsBuildings={false}
+        showsIndoors={false}
+        showsMyLocationButton={false}
+        rotateEnabled={false}
       >
+        <UrlTile
+          urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maximumZ={19}
+          minimumZ={0}
+          flipY={false}
+          zIndex={0}
+          tileSize={256}
+        />
+
         <Polyline
           coordinates={[storeCoords, riderCoords, customerCoords]}
           strokeColor="#1B5E4B"
           strokeWidth={5}
+          zIndex={1}
         />
 
-        <Marker coordinate={storeCoords} anchor={{ x: 0.5, y: 0.5 }} title="Apsara Store">
+        <Marker coordinate={storeCoords} anchor={{ x: 0.5, y: 0.5 }} title="Apsara Store" zIndex={2}>
           <View style={styles.storeMarkerWrap}>
             <View style={styles.storePin}>
               <Text style={styles.pinEmoji}>🏪</Text>
@@ -125,7 +126,7 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
           </View>
         </Marker>
 
-        <Marker coordinate={customerCoords} anchor={{ x: 0.5, y: 0.5 }} title="Delivery Destination">
+        <Marker coordinate={customerCoords} anchor={{ x: 0.5, y: 0.5 }} title="Delivery Destination" zIndex={2}>
           <View style={styles.customerMarkerWrap}>
             <View style={styles.customerPin}>
               <Text style={styles.pinEmoji}>🏠</Text>
@@ -142,9 +143,15 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
           title="Apsara Express Partner"
           flat={true}
           rotation={riderHeading}
+          zIndex={3}
         >
           <View style={styles.riderMarkerWrap}>
-            <View style={styles.pulseRing} />
+            <Animated.View
+              style={[
+                styles.pulseRing,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            />
             <View style={styles.riderPin}>
               <Ionicons name="bicycle" size={24} color="#FFFFFF" />
             </View>
@@ -160,21 +167,18 @@ export default LiveDeliveryMap;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#F8FAF9',
   },
   map: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
   },
   storeMarkerWrap: {
     alignItems: 'center',
   },
   storePin: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1B5E4B',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primary,
     borderWidth: 2.5,
     borderColor: '#FFFFFF',
     alignItems: 'center',
@@ -190,7 +194,7 @@ const styles = StyleSheet.create({
   },
   storeTag: {
     marginTop: 4,
-    backgroundColor: '#1B5E4B',
+    backgroundColor: colors.primary,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -206,9 +210,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   customerPin: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#0F172A',
     borderWidth: 2.5,
     borderColor: '#FFFFFF',
@@ -235,8 +239,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   riderMarkerWrap: {
-    width: 56,
-    height: 56,
+    width: 58,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -246,18 +250,18 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: '#86EFAC',
-    opacity: 0.4,
+    opacity: 0.5,
   },
   riderPin: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1B5E4B',
+    backgroundColor: colors.primary,
     borderWidth: 3,
     borderColor: '#FDE047',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1B5E4B',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 6,
