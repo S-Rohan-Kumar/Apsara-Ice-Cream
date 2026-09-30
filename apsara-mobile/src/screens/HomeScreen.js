@@ -394,6 +394,13 @@ export default function HomeScreen() {
               <Text style={styles.emptyEmoji}>🍨</Text>
               <Text style={styles.emptyTitle}>No flavours found</Text>
               <Text style={styles.emptySubtitle}>Check back soon for freshly churned batches</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={fetchData}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryButtonText}>Refresh</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -520,5 +527,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.textMuted,
     marginTop: 4,
+  },
+  retryButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: fontSize.xs + 1,
+    fontWeight: '800',
   },
 });

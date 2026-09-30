@@ -59,6 +59,13 @@ const OrderSchema = new Schema({
       lng: { type: Number },
     },
     googleMapsUrl: { type: String },
+    riderLocation: {
+      lat: { type: Number },
+      lng: { type: Number },
+      heading: { type: Number, default: 0 },
+      updatedAt: { type: Date },
+    },
+    riderTrackingToken: { type: String },
   },
   pricing: {
     subtotal      : { type: Number, required: true },

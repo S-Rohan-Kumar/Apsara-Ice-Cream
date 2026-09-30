@@ -17,9 +17,16 @@ export function getDeliveryBoyMessage(order) {
   const amount = order.pricing?.total ?? order.totalAmount ?? 0;
   const payType = order.payment?.method === 'cod' ? 'Cash on Delivery' : 'Paid Online';
 
-  return `Apsara Ice Cream Order ${orderNum}
+  const riderTrackToken = order.delivery?.riderTrackingToken || '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://apsara-ice-cream-mandya.vercel.app';
+  const riderTrackUrl = `${origin}/rider/track/${order._id}${riderTrackToken ? `?token=${riderTrackToken}` : ''}`;
+
+  return `🛵 Apsara Ice Cream Delivery ${orderNum}
 Customer: ${custName}${phoneText}
 Address: ${address}
-Maps: ${mapsUrl}
-Amount: ₹${amount} (${payType})`;
+📍 Maps: ${mapsUrl}
+💰 Amount: ₹${amount} (${payType})
+
+👉 Open to Start Live GPS Sharing:
+${riderTrackUrl}`;
 }

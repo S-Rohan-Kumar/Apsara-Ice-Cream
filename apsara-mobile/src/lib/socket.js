@@ -30,4 +30,20 @@ export const leaveOrderSocket = (orderId, callback) => {
   }
 };
 
+export const connectRiderTracking = (orderId, callback) => {
+  if (!socket.connected) {
+    socket.connect();
+  }
+  socket.emit('join_order', orderId);
+  if (callback) {
+    socket.on('rider_location_updated', callback);
+  }
+};
+
+export const leaveRiderTracking = (orderId, callback) => {
+  if (callback) {
+    socket.off('rider_location_updated', callback);
+  }
+};
+
 export default socket;

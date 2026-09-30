@@ -10,6 +10,7 @@ import CategoriesPage     from '../pages/CategoriesPage';
 import OffersPage         from '../pages/OffersPage';
 import BroadcastPage      from '../pages/BroadcastPage';
 import ReportsPage        from '../pages/ReportsPage';
+import RiderTrackPage     from '../pages/RiderTrackPage';
 
 function ProtectedRoute() {
   const userInfo = useSelector(selectUserInfo);
@@ -24,6 +25,8 @@ function PublicRoute() {
 export default function AppRouter() {
   return (
     <Routes>
+      <Route path='/rider/track/:id' element={<RiderTrackPage />} />
+
       <Route element={<PublicRoute />}>
         <Route path='/login' element={<LoginPage />} />
       </Route>

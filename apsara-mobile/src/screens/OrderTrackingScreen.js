@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Linking,
+  Dimensions,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,12 +16,43 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
 import api from '../lib/api';
-import { connectOrderSocket, leaveOrderSocket } from '../lib/socket';
+import { connectOrderSocket, leaveOrderSocket, connectRiderTracking, leaveRiderTracking } from '../lib/socket';
+import LiveDeliveryMap from '../components/tracking/LiveDeliveryMap';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const SNAP_COLLAPSED = 168;
+const SNAP_EXPANDED = Math.round(SCREEN_HEIGHT * 0.82);
+
+const MANDYA_STORE_LOCATION = {
+  lat: 13.0033,
+  lng: 77.6834,
+  title: 'Apsara Testing Store (KR Puram, Bengaluru)',
+};
+
+const DEFAULT_CUSTOMER_LOCATION = {
+  lat: 12.9985,
+  lng: 77.6780,
+};
+
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(1));
+};
 
 const STEPS = [
-  { key: 'placed', label: 'Order Confirmed', desc: 'Received at Mandya store', icon: 'checkmark-circle' },
-  { key: 'preparing', label: 'Packing in Cold Storage', desc: 'Packed in insulated dry-ice bags', icon: 'snow' },
-  { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Delivery partner on the way', icon: 'bicycle' },
+  { key: 'placed', label: 'Order Confirmed', desc: 'Received at store', icon: 'checkmark-circle' },
+  { key: 'preparing', label: 'Packing in Cold Storage', desc: 'Sub-zero insulated dry ice pack', icon: 'snow' },
+  { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Rider on the way to you', icon: 'bicycle' },
   { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh ice cream!', icon: 'ice-cream' },
 ];
 
@@ -30,8 +63,51 @@ export default function OrderTrackingScreen() {
   const { orderId, orderNumber } = route.params || {};
 
   const [order, setOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [currentStatus, setCurrentStatus] = useState('placed');
+  const [riderLocation, setRiderLocation] = useState(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const mapRef = useRef(null);
+  const sheetHeight = useRef(new Animated.Value(SNAP_COLLAPSED)).current;
+  const isExpandedRef = useRef(false);
+
+  useEffect(() => {
+    isExpandedRef.current = isExpanded;
+  }, [isExpanded]);
+
+  const snapTo = (toExpanded) => {
+    setIsExpanded(toExpanded);
+    Animated.spring(sheetHeight, {
+      toValue: toExpanded ? SNAP_EXPANDED : SNAP_COLLAPSED,
+      friction: 8,
+      tension: 48,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 5,
+      onPanResponderMove: (_, gesture) => {
+        const startHeight = isExpandedRef.current ? SNAP_EXPANDED : SNAP_COLLAPSED;
+        const newHeight = Math.min(
+          SNAP_EXPANDED + 30,
+          Math.max(SNAP_COLLAPSED - 20, startHeight - gesture.dy)
+        );
+        sheetHeight.setValue(newHeight);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy < -25) {
+          snapTo(true);
+        } else if (gesture.dy > 25) {
+          snapTo(false);
+        } else {
+          snapTo(!isExpandedRef.current);
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     loadOrderDetails();
@@ -40,22 +116,37 @@ export default function OrderTrackingScreen() {
       setCurrentStatus(newStatus);
     });
 
+    const handleRiderUpdate = (data) => {
+      if (data?.lat && data?.lng) {
+        setRiderLocation({
+          lat: data.lat,
+          lng: data.lng,
+          heading: data.heading || 0,
+          updatedAt: data.updatedAt || new Date(),
+        });
+      }
+    };
+
+    connectRiderTracking(orderId, handleRiderUpdate);
+
     return () => {
       leaveOrderSocket(orderId);
+      leaveRiderTracking(orderId, handleRiderUpdate);
     };
   }, [orderId]);
 
   const loadOrderDetails = async () => {
     try {
-      setLoading(true);
       const res = await api.get(`/orders/${orderId}`);
       if (res.data?.data) {
-        setOrder(res.data.data);
-        setCurrentStatus(res.data.data.status || res.data.data.orderStatus || 'placed');
+        const ord = res.data.data;
+        setOrder(ord);
+        setCurrentStatus(ord.status || ord.orderStatus || 'placed');
+        if (ord.delivery?.riderLocation?.lat && ord.delivery?.riderLocation?.lng) {
+          setRiderLocation(ord.delivery.riderLocation);
+        }
       }
     } catch (e) {
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -72,52 +163,188 @@ export default function OrderTrackingScreen() {
 
   const activeIndex = getStepIndex(currentStatus);
 
-  const handleCallStore = () => {
+  const customerLat = order?.delivery?.location?.lat || DEFAULT_CUSTOMER_LOCATION.lat;
+  const customerLng = order?.delivery?.location?.lng || DEFAULT_CUSTOMER_LOCATION.lng;
+
+  const riderDistance = riderLocation?.lat && riderLocation?.lng
+    ? calculateDistanceKm(riderLocation.lat, riderLocation.lng, customerLat, customerLng)
+    : calculateDistanceKm(MANDYA_STORE_LOCATION.lat, MANDYA_STORE_LOCATION.lng, customerLat, customerLng);
+
+  const deliveryAddressText = order?.delivery?.address
+    ? typeof order.delivery.address === 'string'
+      ? order.delivery.address
+      : [
+          order.delivery.address.flat,
+          order.delivery.address.street,
+          order.delivery.address.area,
+          order.delivery.address.city,
+          order.delivery.address.pincode,
+        ].filter(Boolean).join(', ')
+    : 'Address details provided with order';
+
+  const handleCallPartner = () => {
     Linking.openURL('tel:+919876543210').catch(() => {});
   };
 
+  const handleRecenter = () => {
+    mapRef.current?.recenter();
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar style="dark" backgroundColor={colors.white} translucent={false} />
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <StatusBar style="dark" backgroundColor="transparent" translucent={true} />
+
+      <View style={styles.mapContainer}>
+        <LiveDeliveryMap
+          ref={mapRef}
+          storeLocation={MANDYA_STORE_LOCATION}
+          customerLocation={{
+            lat: customerLat,
+            lng: customerLng,
+          }}
+          riderLocation={riderLocation}
+          containerStyle={styles.fullscreenMap}
+        />
+      </View>
+
+      <View style={[styles.floatingHeader, { top: insets.top + 8 }]} pointerEvents="box-none">
         <TouchableOpacity
           onPress={() => navigation.navigate('Main', { screen: 'Home' })}
-          style={styles.backButton}
+          style={styles.floatingRoundBtn}
+          activeOpacity={0.85}
         >
-          <Ionicons name="close" size={24} color={colors.text} />
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Order #{order?.orderNumber || orderNumber || '...'}</Text>
-          <Text style={styles.headerSubtitle}>Live Tracking</Text>
+
+        <View style={styles.floatingStatusBadge}>
+          <View style={styles.statusPulseDot}>
+            <View style={styles.statusPulseRing} />
+            <View style={styles.statusDotSolid} />
+          </View>
+          <Text style={styles.floatingStatusText}>
+            {currentStatus === 'out_for_delivery'
+              ? 'RIDER EN ROUTE'
+              : currentStatus === 'preparing'
+              ? 'PACKING ICE CREAM'
+              : currentStatus === 'delivered'
+              ? 'DELIVERED'
+              : 'ORDER PLACED'}
+          </Text>
         </View>
       </View>
 
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-          <View style={styles.etaCard}>
-            <View style={styles.etaHeader}>
-              <View style={styles.flashBadge}>
-                <Ionicons name="flash" size={13} color="#FFFFFF" />
-                <Text style={styles.flashText}>SUPERFAST</Text>
+      <TouchableOpacity
+        style={[styles.floatingRecenterBtn, { bottom: SNAP_COLLAPSED + 16 }]}
+        onPress={handleRecenter}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="locate" size={22} color={colors.primary} />
+      </TouchableOpacity>
+
+      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+        <View {...panResponder.panHandlers} style={styles.sheetHandleZone}>
+          <View style={styles.grabBar} />
+
+          <View style={styles.sheetHeaderRow}>
+            <View style={styles.etaInfoCol}>
+              <View style={styles.superfastBadge}>
+                <Ionicons name="flash" size={10} color="#FFFFFF" />
+                <Text style={styles.superfastText}>SUPERFAST • COLD CHAIN</Text>
               </View>
-              <Text style={styles.etaTime}>
-                {currentStatus === 'delivered' ? 'DELIVERED 🎉' : 'Arriving in 15-20 Mins'}
+              <Text style={styles.etaMainTitle}>
+                {currentStatus === 'delivered'
+                  ? 'Delivered 🎉'
+                  : currentStatus === 'out_for_delivery'
+                  ? riderDistance
+                    ? `${riderDistance} km away • ~${Math.max(3, Math.round(riderDistance * 3))} mins`
+                    : 'Rider is on the way!'
+                  : currentStatus === 'preparing'
+                  ? 'Arriving in 15-20 Mins'
+                  : 'Order Confirmed'}
               </Text>
             </View>
-            <Text style={styles.etaDesc}>
-              {currentStatus === 'delivered'
-                ? 'Your order was successfully delivered. Have a sweet day!'
-                : 'Our delivery partner is rushing to bring your ice cream icy and fresh.'}
-            </Text>
+
+            <TouchableOpacity
+              onPress={() => snapTo(!isExpanded)}
+              style={styles.sheetToggleBtn}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={isExpanded ? 'chevron-down' : 'chevron-up'}
+                size={22}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.sectionHeading}>Order Status</Text>
+          <View style={styles.riderPartnerCard}>
+            <View style={styles.riderAvatarContainer}>
+              <Ionicons name="bicycle" size={20} color={colors.primary} />
+              <View style={styles.avatarVerifiedBadge}>
+                <Ionicons name="checkmark" size={9} color={colors.white} />
+              </View>
+            </View>
 
+            <View style={styles.riderDetails}>
+              <View style={styles.riderNameRow}>
+                <Text style={styles.riderName}>Apsara Express Partner</Text>
+                <View style={styles.ratingBadge}>
+                  <Ionicons name="star" size={10} color="#F59E0B" />
+                  <Text style={styles.ratingText}>4.9</Text>
+                </View>
+              </View>
+              <Text style={styles.riderSubtext}>Electric Scooter • -18°C Insulated Pack</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleCallPartner}
+              style={styles.callPartnerBtn}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="call" size={16} color={colors.white} />
+            </TouchableOpacity>
+          </View>
+
+          {!isExpanded && (
+            <TouchableOpacity
+              onPress={() => snapTo(true)}
+              style={styles.slideHintRow}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.slideHintText}>Slide up for order & billing details</Text>
+              <Ionicons name="chevron-up" size={13} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.telemetryBar}>
+            <View style={styles.telemetryItem}>
+              <Text style={styles.telemetryLabel}>DISTANCE</Text>
+              <Text style={styles.telemetryValue}>
+                {riderDistance ? `${riderDistance} km` : 'En Route'}
+              </Text>
+            </View>
+            <View style={styles.telemetryDivider} />
+            <View style={styles.telemetryItem}>
+              <Text style={styles.telemetryLabel}>STORAGE TEMP</Text>
+              <Text style={[styles.telemetryValue, { color: '#0284C7' }]}>-18°C Icy Cold</Text>
+            </View>
+            <View style={styles.telemetryDivider} />
+            <View style={styles.telemetryItem}>
+              <Text style={styles.telemetryLabel}>GPS FEED</Text>
+              <Text style={[styles.telemetryValue, { color: riderLocation ? '#16A34A' : '#F59E0B' }]}>
+                {riderLocation ? '🟢 Active' : '🟡 Standby'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionHeading}>Order Progress</Text>
             <View style={styles.timeline}>
               {STEPS.map((step, idx) => {
                 const isPassed = activeIndex >= idx;
@@ -135,7 +362,7 @@ export default function OrderTrackingScreen() {
                       >
                         <Ionicons
                           name={step.icon}
-                          size={14}
+                          size={13}
                           color={isPassed ? colors.white : colors.textMuted}
                         />
                       </View>
@@ -167,23 +394,25 @@ export default function OrderTrackingScreen() {
             </View>
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.deliveryPartnerRow}>
-              <View style={styles.partnerAvatar}>
-                <Ionicons name="person" size={20} color={colors.primary} />
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionHeading}>Delivery Destination</Text>
+            <View style={styles.addressRow}>
+              <View style={styles.addressIconWrap}>
+                <Ionicons name="location" size={18} color={colors.primary} />
               </View>
-              <View style={styles.partnerInfo}>
-                <Text style={styles.partnerName}>Apsara Delivery Partner</Text>
-                <Text style={styles.partnerSub}>Vaccinated • Sub-Zero Ice Box Carrier</Text>
+              <View style={styles.addressTextWrap}>
+                <Text style={styles.addressLabel}>
+                  {order?.delivery?.address?.addressType?.toUpperCase() || 'HOME'}
+                </Text>
+                <Text style={styles.addressFull}>
+                  {deliveryAddressText}
+                </Text>
               </View>
-              <TouchableOpacity onPress={handleCallStore} style={styles.callButton}>
-                <Ionicons name="call" size={16} color={colors.white} />
-              </TouchableOpacity>
             </View>
           </View>
 
           {order && (
-            <View style={[styles.card, styles.itemsCard]}>
+            <View style={styles.sectionCard}>
               <Text style={styles.sectionHeading}>Order Summary</Text>
               {order.items?.map((item, idx) => (
                 <View key={idx} style={styles.summaryItemRow}>
@@ -197,7 +426,7 @@ export default function OrderTrackingScreen() {
               <View style={styles.divider} />
 
               <View style={styles.summaryBreakdownRow}>
-                <Text style={styles.summaryBreakdownLabel}>Item Total</Text>
+                <Text style={styles.summaryBreakdownLabel}>Item Subtotal</Text>
                 <Text style={styles.summaryBreakdownValue}>₹{order.pricing?.subtotal ?? 0}</Text>
               </View>
 
@@ -216,14 +445,14 @@ export default function OrderTrackingScreen() {
               </View>
 
               <View style={styles.summaryBreakdownRow}>
-                <Text style={styles.summaryBreakdownLabel}>Insulated Packaging</Text>
+                <Text style={styles.summaryBreakdownLabel}>Insulated Sub-Zero Packaging</Text>
                 <Text style={styles.summaryBreakdownValue}>₹{order.pricing?.packagingFee ?? 5}</Text>
               </View>
 
               <View style={styles.summaryBreakdownRow}>
                 <Text style={styles.summaryBreakdownLabel}>Payment Mode</Text>
                 <Text style={[styles.summaryBreakdownValue, order.payment?.method === 'online' && styles.summaryDiscountValue]}>
-                  {order.payment?.method === 'online' ? '🟢 UPI / Online Paid' : '💵 Cash on Delivery (Pending)'}
+                  {order.payment?.method === 'online' ? '🟢 UPI / Online Paid' : '💵 Cash on Delivery'}
                 </Text>
               </View>
 
@@ -233,28 +462,30 @@ export default function OrderTrackingScreen() {
                 <Text style={styles.summaryTotalLabel}>
                   {order.payment?.method === 'online' ? 'Total Paid' : 'To Pay on Delivery'}
                 </Text>
-                <Text style={styles.summaryTotalValue}>₹{order.pricing?.total ?? order.totalAmount ?? 0}</Text>
+                <Text style={styles.summaryTotalValue}>
+                  ₹{order.pricing?.total ?? order.totalAmount ?? 0}
+                </Text>
               </View>
             </View>
           )}
 
           <TouchableOpacity
-            style={styles.doneBtn}
+            style={styles.backStoreBtn}
             onPress={() => navigation.navigate('Main', { screen: 'Home' })}
             activeOpacity={0.85}
           >
-            <Text style={styles.doneBtnText}>Back to Store</Text>
+            <Text style={styles.backStoreBtnText}>Back to Store</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.viewOrdersBtn}
+            style={styles.allOrdersBtn}
             onPress={() => navigation.navigate('Main', { screen: 'Orders' })}
             activeOpacity={0.85}
           >
-            <Text style={styles.viewOrdersBtnText}>View All Orders</Text>
+            <Text style={styles.allOrdersBtnText}>View All Orders</Text>
           </TouchableOpacity>
         </ScrollView>
-      )}
+      </Animated.View>
     </View>
   );
 }
@@ -262,98 +493,310 @@ export default function OrderTrackingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F8FAF9',
   },
-  header: {
+  mapContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fullscreenMap: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 0,
+    borderWidth: 0,
+  },
+  floatingHeader: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    justifyContent: 'space-between',
+    zIndex: 20,
+  },
+  floatingRoundBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  backButton: {
-    padding: 4,
-    marginRight: spacing.md,
+  floatingStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.full,
+    gap: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  headerTextContainer: {
+  statusPulseDot: {
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  statusPulseRing: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#86EFAC',
+    opacity: 0.7,
+  },
+  statusDotSolid: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+  },
+  floatingStatusText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  floatingRecenterBtn: {
+    position: 'absolute',
+    right: spacing.lg,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 20,
+  },
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 16,
+    zIndex: 30,
+    overflow: 'hidden',
+  },
+  sheetHandleZone: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: colors.white,
+  },
+  grabBar: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  etaInfoCol: {
     flex: 1,
+    paddingRight: 8,
   },
-  headerTitle: {
-    fontSize: fontSize.md,
+  superfastBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    gap: 4,
+    marginBottom: 3,
+  },
+  superfastText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: colors.white,
+    letterSpacing: 0.4,
+  },
+  etaMainTitle: {
+    fontSize: fontSize.md + 1,
     fontWeight: '900',
     color: colors.text,
+    letterSpacing: -0.3,
   },
-  headerSubtitle: {
-    fontSize: fontSize.xs,
-    color: colors.accent,
-    fontWeight: '800',
-  },
-  centered: {
-    flex: 1,
+  sheetToggleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scroll: {
+  riderPartnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAF9',
+    borderRadius: radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  riderAvatarContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  avatarVerifiedBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  riderDetails: {
     flex: 1,
-    padding: spacing.md,
   },
-  etaCard: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    shadowColor: colors.primaryDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  etaHeader: {
+  riderNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    gap: 5,
   },
-  flashBadge: {
+  riderName: {
+    fontSize: fontSize.xs + 1,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
     borderRadius: radius.sm,
     gap: 2,
   },
-  flashText: {
+  ratingText: {
     fontSize: 9,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  riderSubtext: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  callPartnerBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  slideHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  slideHintText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  sheetScroll: {
+    flex: 1,
+  },
+  sheetScrollContent: {
+    padding: spacing.md,
+    paddingBottom: 40,
+  },
+  telemetryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F1F5F9',
+    borderRadius: radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: spacing.md,
+  },
+  telemetryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  telemetryDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#CBD5E1',
+  },
+  telemetryLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: colors.textMuted,
+    marginBottom: 1,
+    letterSpacing: 0.4,
+  },
+  telemetryValue: {
+    fontSize: 11,
     fontWeight: '900',
-    color: colors.white,
+    color: colors.text,
   },
-  etaTime: {
-    fontSize: fontSize.md,
-    fontWeight: '900',
-    color: colors.white,
-  },
-  etaDesc: {
-    fontSize: fontSize.xs,
-    color: '#D1FAE5',
-    lineHeight: 18,
-  },
-  card: {
+  sectionCard: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: '#E2E8F0',
     marginBottom: spacing.md,
   },
   sectionHeading: {
     fontSize: fontSize.xs,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     marginBottom: spacing.md,
   },
   timeline: {
@@ -361,15 +804,15 @@ const styles = StyleSheet.create({
   },
   timelineStep: {
     flexDirection: 'row',
-    minHeight: 56,
+    minHeight: 52,
   },
   stepIndicatorCol: {
     alignItems: 'center',
-    width: 30,
+    width: 26,
   },
   dot: {
-    width: 26,
-    height: 26,
+    width: 24,
+    height: 24,
     borderRadius: radius.full,
     backgroundColor: colors.border,
     alignItems: 'center',
@@ -380,10 +823,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   dotCurrent: {
-    backgroundColor: colors.accent,
+    backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: colors.white,
-    shadowColor: colors.accent,
+    shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 4,
@@ -392,7 +835,7 @@ const styles = StyleSheet.create({
   connectorLine: {
     width: 2,
     flex: 1,
-    backgroundColor: colors.borderLight,
+    backgroundColor: '#E2E8F0',
     marginVertical: 2,
   },
   connectorLinePassed: {
@@ -420,42 +863,33 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  deliveryPartnerRow: {
+  addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
-  partnerAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.full,
+  addressIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  partnerInfo: {
+  addressTextWrap: {
     flex: 1,
   },
-  partnerName: {
-    fontSize: fontSize.sm,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  partnerSub: {
+  addressLabel: {
     fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 1,
+    fontWeight: '900',
+    color: colors.primary,
+    letterSpacing: 0.5,
   },
-  callButton: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemsCard: {
-    marginBottom: spacing.xl,
+  addressFull: {
+    fontSize: fontSize.xs,
+    color: colors.text,
+    marginTop: 2,
+    lineHeight: 17,
   },
   summaryItemRow: {
     flexDirection: 'row',
@@ -467,11 +901,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.text,
     fontWeight: '600',
+    flex: 1,
+    paddingRight: 8,
   },
   summaryItemPrice: {
     fontSize: fontSize.xs,
     fontWeight: '800',
     color: colors.text,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: spacing.sm,
   },
   summaryBreakdownRow: {
     flexDirection: 'row',
@@ -503,6 +944,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingTop: 4,
   },
   summaryTotalLabel: {
     fontSize: fontSize.sm,
@@ -514,28 +956,32 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.primary,
   },
-  doneBtn: {
+  backStoreBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
     borderRadius: radius.md,
     alignItems: 'center',
     marginBottom: spacing.sm,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  doneBtnText: {
+  backStoreBtnText: {
     color: colors.white,
     fontSize: fontSize.sm,
     fontWeight: '800',
   },
-  viewOrdersBtn: {
-    backgroundColor: colors.background,
+  allOrdersBtn: {
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
+    borderColor: '#E2E8F0',
+    paddingVertical: 14,
     borderRadius: radius.md,
     alignItems: 'center',
-    marginBottom: 40,
   },
-  viewOrdersBtnText: {
+  allOrdersBtnText: {
     color: colors.text,
     fontSize: fontSize.sm,
     fontWeight: '800',

@@ -25,6 +25,17 @@ export const initSocket = (server) => {
       socket.leave(`order_${orderId}`);
     });
 
+    socket.on("rider_location", ({ orderId, lat, lng, heading }) => {
+      if (orderId && lat && lng) {
+        io.to(`order_${orderId}`).emit("rider_location_updated", {
+          lat,
+          lng,
+          heading: heading || 0,
+          updatedAt: new Date(),
+        });
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("Socket disconnected:", socket.id);
     });

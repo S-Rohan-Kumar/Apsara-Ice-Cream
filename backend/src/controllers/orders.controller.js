@@ -343,6 +343,11 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     throw new APIError(400, `Cannot go from '${order.status}' to '${status}'`);
   }
 
+  if (status === 'out_for_delivery' && !order.delivery?.riderTrackingToken) {
+    if (!order.delivery) order.delivery = {};
+    order.delivery.riderTrackingToken = crypto.randomBytes(16).toString('hex');
+  }
+
   order.status = status;
   await order.save();
 
@@ -406,7 +411,44 @@ const getMonthlyReport = asyncHandler(async (req, res) => {
   }, 'Report generated'));
 });
 
+// ─── GET /api/orders/rider-track/:id ──────────────────────────────────────────
+const getRiderOrderDetails = asyncHandler(async (req, res) => {
+  const { token } = req.query;
+  const order = await Order.findById(req.params.id)
+    .select('orderNumber status delivery customer createdAt')
+    .populate('customer', 'name phone');
+
+  if (!order) throw new APIError(404, 'Order not found');
+  if (order.delivery?.riderTrackingToken && token && order.delivery.riderTrackingToken !== token) {
+    throw new APIError(403, 'Invalid rider tracking token');
+  }
+
+  return res.status(200).json(new APIResponse(200, order, 'Rider order details fetched'));
+});
+
+// ─── POST /api/orders/rider-track/:id/location ────────────────────────────────
+const updateRiderLocation = asyncHandler(async (req, res) => {
+  const { lat, lng, heading } = req.body;
+  if (!lat || !lng) throw new APIError(400, 'lat and lng are required');
+
+  const order = await Order.findById(req.params.id);
+  if (!order) throw new APIError(404, 'Order not found');
+
+  if (!order.delivery) order.delivery = {};
+  order.delivery.riderLocation = {
+    lat: Number(lat),
+    lng: Number(lng),
+    heading: Number(heading || 0),
+    updatedAt: new Date(),
+  };
+
+  await order.save();
+
+  return res.status(200).json(new APIResponse(200, { success: true }, 'Rider location recorded'));
+});
+
 export {
   initiateOrder, confirmOrder, getMyOrders, getOrderDetails,
   cancelOrder, getAdminOrders, getAdminOrderDetails, updateOrderStatus, getMonthlyReport,
+  getRiderOrderDetails, updateRiderLocation,
 };
