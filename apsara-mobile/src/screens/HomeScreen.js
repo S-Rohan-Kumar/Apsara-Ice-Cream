@@ -281,6 +281,15 @@ export default function HomeScreen() {
       }
     }
 
+    if (banner._id === 'story_purity' || titleLower.includes('artisan')) {
+      const iceCreamCat = categories.find((c) => c.name.toLowerCase().includes('ice cream'));
+      if (iceCreamCat) {
+        setSelectedCategory(iceCreamCat._id);
+        flatListRef.current?.scrollToOffset({ offset: 320, animated: true });
+        return;
+      }
+    }
+
     if (titleLower.includes('fruit')) {
       const fruitCat = categories.find((c) => c.name.toLowerCase().includes('fruit'));
       if (fruitCat) {
