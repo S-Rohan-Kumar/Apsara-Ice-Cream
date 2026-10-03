@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../lib/api';
 import { registerForPushNotificationsAsync } from '../lib/notifications';
 import socket, { connectOrderSocket, leaveOrderSocket } from '../lib/socket';
+import { cacheProducts } from '../lib/productImageCache';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -28,6 +29,7 @@ import BannerCarousel from '../components/home/BannerCarousel';
 import CategoryChips from '../components/home/CategoryChips';
 import ProductCard from '../components/home/ProductCard';
 import VariantSelectorModal from '../components/common/VariantSelectorModal';
+import ProductDetailModal from '../components/common/ProductDetailModal';
 import FloatingCartBar from '../components/home/FloatingCartBar';
 import AnnouncementsModal from '../components/common/AnnouncementsModal';
 import AnnouncementCard from '../components/home/AnnouncementCard';
@@ -52,6 +54,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState(null);
+  const [selectedProductForDetail, setSelectedProductForDetail] = useState(null);
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   const [storeNotice, setStoreNotice] = useState('');
 
@@ -73,7 +76,9 @@ export default function HomeScreen() {
         setCategories(catsRes.value.data?.data || []);
       }
       if (prodsRes.status === 'fulfilled') {
-        setProducts(prodsRes.value.data?.data || []);
+        const prodList = prodsRes.value.data?.data || [];
+        setProducts(prodList);
+        cacheProducts(prodList);
       }
       if (bcastRes.status === 'fulfilled') {
         setBroadcasts(bcastRes.value.data?.data || []);
@@ -141,6 +146,7 @@ export default function HomeScreen() {
         }
         if (prodsRes.status === 'fulfilled' && prodsRes.value.data?.data) {
           setProducts(prodsRes.value.data.data);
+          cacheProducts(prodsRes.value.data.data);
         }
       }).catch(() => {});
     };
@@ -151,6 +157,7 @@ export default function HomeScreen() {
           if (res.data?.data) {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setProducts(res.data.data);
+            cacheProducts(res.data.data);
           }
         })
         .catch(() => {});
@@ -300,6 +307,7 @@ export default function HomeScreen() {
     <ProductCard
       product={item}
       onOpenVariants={(p) => setSelectedProductForVariants(p)}
+      onOpenDetail={(p) => setSelectedProductForDetail(p)}
     />
   ), []);
 
@@ -420,6 +428,13 @@ export default function HomeScreen() {
         visible={!!selectedProductForVariants}
         product={selectedProductForVariants}
         onClose={() => setSelectedProductForVariants(null)}
+      />
+
+      <ProductDetailModal
+        visible={!!selectedProductForDetail}
+        product={selectedProductForDetail}
+        onClose={() => setSelectedProductForDetail(null)}
+        onOpenVariants={(p) => setSelectedProductForVariants(p)}
       />
 
       <AnnouncementsModal

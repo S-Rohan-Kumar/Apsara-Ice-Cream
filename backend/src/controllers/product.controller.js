@@ -242,6 +242,7 @@ const createProduct = asyncHandler(async (req, res) => {
         sortOrder: sortOrder || 0,
     });
 
+    await invalidate("products", "products_all");
     emitProductsUpdated({ action: 'created', productId: product._id });
     return res
         .status(201)
@@ -254,10 +255,20 @@ const updateProduct = asyncHandler(async (req, res) => {
     if (!product || !product.isActive)
         throw new APIError(404, "Product not found");
 
-    const allowed = ["name", "category", "isZeroSugar", "sortOrder"];
-    allowed.forEach((field) => {
-        if (req.body[field] !== undefined) product[field] = req.body[field];
-    });
+    if (req.body.name) product.name = req.body.name.trim();
+
+    if (req.body.category && req.body.category.trim() !== '') {
+        const cat = await Category.findById(req.body.category);
+        if (cat) product.category = cat._id;
+    }
+
+    if (req.body.isZeroSugar !== undefined) {
+        product.isZeroSugar = req.body.isZeroSugar === 'true' || req.body.isZeroSugar === true;
+    }
+
+    if (req.body.sortOrder !== undefined) {
+        product.sortOrder = Number(req.body.sortOrder) || 0;
+    }
 
     if (req.body.priceOverride) {
         try {
@@ -274,6 +285,7 @@ const updateProduct = asyncHandler(async (req, res) => {
     }
 
     await product.save();
+    await invalidate("products", "products_all");
     emitProductsUpdated({ action: 'updated', productId: product._id });
     return res
         .status(200)
@@ -341,6 +353,7 @@ const toggleStock = asyncHandler(async (req, res) => {
 
     product.isAvailable = !product.isAvailable;
     await product.save();
+    await invalidate("products", "products_all");
     emitProductsUpdated({ action: 'stock_updated', productId: product._id });
 
     return res
@@ -361,6 +374,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 
     product.isActive = false;
     await product.save();
+    await invalidate("products", "products_all");
     emitProductsUpdated({ action: 'deleted', productId: product._id });
 
     return res

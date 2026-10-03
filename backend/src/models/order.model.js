@@ -38,6 +38,7 @@ const OrderItemSchema = new Schema({
   quantity   : { type: Number, required: true, min: 1 },
   unitPrice  : { type: Number, required: true },
   totalPrice : { type: Number, required: true },
+  imageUrl   : { type: String, default: '' },
 }, { _id: false });
 
 const OrderSchema = new Schema({

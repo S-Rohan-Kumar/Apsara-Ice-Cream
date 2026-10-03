@@ -17,6 +17,7 @@ import { colors, spacing, radius, fontSize } from '../theme';
 import SearchBar from '../components/common/SearchBar';
 import ProductCard from '../components/home/ProductCard';
 import VariantSelectorModal from '../components/common/VariantSelectorModal';
+import ProductDetailModal from '../components/common/ProductDetailModal';
 import FloatingCartBar from '../components/home/FloatingCartBar';
 
 const INITIAL_RECENT_SEARCHES = [
@@ -45,6 +46,7 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState(INITIAL_RECENT_SEARCHES);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState(null);
+  const [selectedProductForDetail, setSelectedProductForDetail] = useState(null);
 
   useEffect(() => {
     loadAllProducts();
@@ -185,6 +187,7 @@ export default function SearchScreen() {
             <ProductCard
               product={item}
               onOpenVariants={(p) => setSelectedProductForVariants(p)}
+              onOpenDetail={(p) => setSelectedProductForDetail(p)}
             />
           )}
           ListEmptyComponent={
@@ -211,6 +214,13 @@ export default function SearchScreen() {
         visible={!!selectedProductForVariants}
         product={selectedProductForVariants}
         onClose={() => setSelectedProductForVariants(null)}
+      />
+
+      <ProductDetailModal
+        visible={!!selectedProductForDetail}
+        product={selectedProductForDetail}
+        onClose={() => setSelectedProductForDetail(null)}
+        onOpenVariants={(p) => setSelectedProductForVariants(p)}
       />
     </View>
   );

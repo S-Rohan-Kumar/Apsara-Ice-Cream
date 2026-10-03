@@ -4,3 +4,4 @@ node_modules
 .env*.local
 firebase-admin.json
 google-services.json
+assets/

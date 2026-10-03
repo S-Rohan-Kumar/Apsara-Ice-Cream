@@ -9,6 +9,7 @@ import {
   Dimensions,
   Animated,
   PanResponder,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
 import api from '../lib/api';
+import { ensureProductImageCache, getCachedProductImage } from '../lib/productImageCache';
 import {
   connectOrderSocket,
   leaveOrderSocket,
@@ -146,6 +148,7 @@ export default function OrderTrackingScreen() {
   const loadOrderDetails = async () => {
     if (!orderId) return;
     try {
+      await ensureProductImageCache();
       const res = await api.get(`/orders/${orderId}`);
       if (res.data?.data) {
         const ord = res.data.data;
@@ -432,14 +435,29 @@ export default function OrderTrackingScreen() {
           {order && (
             <View style={styles.sectionCard}>
               <Text style={styles.sectionHeading}>Order Summary</Text>
-              {order.items?.map((item, idx) => (
-                <View key={idx} style={styles.summaryItemRow}>
-                  <Text style={styles.summaryItemName}>
-                    {item.quantity}x {item.productName} ({item.variant})
-                  </Text>
-                  <Text style={styles.summaryItemPrice}>₹{item.totalPrice}</Text>
-                </View>
-              ))}
+              {order.items?.map((item, idx) => {
+                const imgUrl = getCachedProductImage(item);
+                return (
+                  <View key={idx} style={styles.summaryItemRow}>
+                    {imgUrl ? (
+                      <Image source={{ uri: imgUrl }} style={styles.summaryItemThumb} resizeMode="contain" fadeDuration={0} />
+                    ) : (
+                      <View style={styles.summaryItemThumbPlaceholder}>
+                        <Text style={styles.summaryItemThumbEmoji}>🍨</Text>
+                      </View>
+                    )}
+                    <View style={styles.summaryItemInfo}>
+                      <Text style={styles.summaryItemName} numberOfLines={1}>
+                        {item.productName}
+                      </Text>
+                      <Text style={styles.summaryItemMeta}>
+                        {item.quantity}x • {item.variant}
+                      </Text>
+                    </View>
+                    <Text style={styles.summaryItemPrice}>₹{item.totalPrice}</Text>
+                  </View>
+                );
+              })}
 
               <View style={styles.divider} />
 
@@ -898,15 +916,39 @@ const styles = StyleSheet.create({
   summaryItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 6,
+    gap: 10,
+  },
+  summaryItemThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: '#F1F5F9',
+  },
+  summaryItemThumbPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryItemThumbEmoji: {
+    fontSize: 16,
+  },
+  summaryItemInfo: {
+    flex: 1,
   },
   summaryItemName: {
     fontSize: fontSize.xs,
     color: colors.text,
+    fontWeight: '700',
+  },
+  summaryItemMeta: {
+    fontSize: 10,
     fontWeight: '600',
-    flex: 1,
-    paddingRight: 8,
+    color: colors.textMuted,
+    marginTop: 1,
   },
   summaryItemPrice: {
     fontSize: fontSize.xs,

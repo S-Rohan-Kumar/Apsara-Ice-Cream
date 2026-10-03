@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { colors, spacing, radius, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import api from '../lib/api';
+import { ensureProductImageCache, getCachedProductImage } from '../lib/productImageCache';
 
 const STATUS_COLORS = {
   placed: { bg: '#FEF3C7', text: '#92400E', label: 'Order Placed' },
@@ -43,6 +45,7 @@ export default function OrdersScreen() {
     }
 
     try {
+      await ensureProductImageCache();
       const res = await api.get('/orders/my');
       const orderList = res.data?.data?.orders || res.data?.data || [];
       setOrders(orderList);
@@ -159,11 +162,28 @@ export default function OrdersScreen() {
                 </View>
 
                 <View style={styles.itemsList}>
-                  {item.items?.map((it, idx) => (
-                    <Text key={idx} style={styles.itemLine}>
-                      {it.quantity}x {it.productName} ({it.variant})
-                    </Text>
-                  ))}
+                  {item.items?.map((it, idx) => {
+                    const imgUrl = getCachedProductImage(it);
+                    return (
+                      <View key={idx} style={styles.itemRow}>
+                        {imgUrl ? (
+                          <Image source={{ uri: imgUrl }} style={styles.itemThumb} resizeMode="contain" fadeDuration={0} />
+                        ) : (
+                          <View style={styles.itemThumbPlaceholder}>
+                            <Text style={styles.itemThumbEmoji}>🍨</Text>
+                          </View>
+                        )}
+                        <View style={styles.itemInfo}>
+                          <Text style={styles.itemName} numberOfLines={1}>
+                            {it.productName}
+                          </Text>
+                          <Text style={styles.itemMeta}>
+                            {it.quantity}x • {it.variant} • ₹{it.totalPrice || (it.unitPrice * it.quantity)}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 <View style={styles.divider} />
@@ -282,12 +302,44 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   itemsList: {
-    marginVertical: spacing.xs,
+    marginVertical: spacing.sm,
+    gap: 8,
   },
-  itemLine: {
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    marginBottom: 2,
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  itemThumb: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: '#F1F5F9',
+  },
+  itemThumbPlaceholder: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemThumbEmoji: {
+    fontSize: 18,
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: fontSize.xs + 1,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  itemMeta: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginTop: 1,
   },
   divider: {
     height: 1,

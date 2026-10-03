@@ -50,6 +50,7 @@ const calculateOrderPricing = (items, productMap, activeOffers) => {
       quantity: item.quantity,
       unitPrice: base,
       totalPrice: base * item.quantity,
+      imageUrl: product.imageUrl || '',
       categoryId: product.category._id.toString(),
     });
 
@@ -261,6 +262,7 @@ const getMyOrders = asyncHandler(async (req, res) => {
 
   const [orders, total] = await Promise.all([
     Order.find({ customer: req.user._id })
+      .populate('items.product', 'name imageUrl category')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
@@ -274,7 +276,8 @@ const getMyOrders = asyncHandler(async (req, res) => {
 
 // ─── GET /api/orders/:id ──────────────────────────────────────────────────────
 const getOrderDetails = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id);
+  const order = await Order.findById(req.params.id)
+    .populate('items.product', 'name imageUrl category');
   if (!order) throw new APIError(404, 'Order not found');
   if (order.customer.toString() !== req.user._id.toString()) {
     throw new APIError(403, 'Access denied');
@@ -313,6 +316,7 @@ const getAdminOrders = asyncHandler(async (req, res) => {
   const [orders, total] = await Promise.all([
     Order.find(filter)
       .populate('customer', 'name phone')
+      .populate('items.product', 'name imageUrl category')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit)),
@@ -326,7 +330,9 @@ const getAdminOrders = asyncHandler(async (req, res) => {
 
 // ─── GET /api/orders/admin/:id ────────────────────────────────────────────────
 const getAdminOrderDetails = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id).populate('customer', 'name phone');
+  const order = await Order.findById(req.params.id)
+    .populate('customer', 'name phone')
+    .populate('items.product', 'name imageUrl category');
   if (!order) throw new APIError(404, 'Order not found');
   return res.status(200).json(new APIResponse(200, order, 'Order fetched'));
 });

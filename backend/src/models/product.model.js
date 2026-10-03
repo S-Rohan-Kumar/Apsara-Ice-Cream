@@ -31,6 +31,8 @@ const ProductSchema = new Schema(
             required: true,
         },
         imageUrl: { type: String, default: "" },
+        description: { type: String, default: "" },
+        nutritionInfo: { type: String, default: "" },
 
         isZeroSugar: { type: Boolean, default: false },
 

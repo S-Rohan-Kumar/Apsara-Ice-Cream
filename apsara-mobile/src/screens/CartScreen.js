@@ -237,6 +237,7 @@ export default function CartScreen() {
         productId: i.productId,
         variant: i.variant,
         quantity: i.quantity,
+        imageUrl: i.imageUrl,
       }));
 
       const confirmRes = await api.post('/orders/confirm', {

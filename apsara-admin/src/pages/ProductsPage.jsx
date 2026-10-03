@@ -422,10 +422,15 @@ export default function ProductsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const catId = form.category || selectedCat;
+    if (!catId) {
+      showError('Please select a category');
+      return;
+    }
     const fd = new FormData();
-    fd.append('name', form.name);
-    fd.append('category', form.category || selectedCat);
-    fd.append('isZeroSugar', form.isZeroSugar);
+    fd.append('name', form.name.trim());
+    fd.append('category', catId);
+    fd.append('isZeroSugar', String(Boolean(form.isZeroSugar)));
     if (imageFile) fd.append('image', imageFile);
     try {
       if (editingId) {
@@ -473,8 +478,11 @@ export default function ProductsPage() {
 
         <button
           onClick={() => {
-            setShowModal(true);
             setEditingId(null);
+            setForm({ name: '', category: selectedCat || '', isZeroSugar: false });
+            setImageFile(null);
+            setPreview('');
+            setShowModal(true);
           }}
           className='self-start md:self-auto bg-[#1B4332] hover:bg-[#163829] active:scale-95 text-white font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl shadow-xl shadow-emerald-900/15 transition-all text-xs uppercase tracking-[2px] flex items-center gap-2'
         >

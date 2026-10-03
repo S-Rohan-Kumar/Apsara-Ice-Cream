@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,46 +14,48 @@ export default function BottomTabNavigator() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 14);
 
+  const tabBarStyle = useMemo(() => ({
+    backgroundColor: colors.white,
+    borderTopColor: colors.borderLight,
+    borderTopWidth: 1,
+    height: 60 + bottomInset,
+    paddingBottom: bottomInset,
+    paddingTop: 8,
+    elevation: 8,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  }), [bottomInset]);
+
+  const screenOptions = useMemo(() => ({ route }) => ({
+    headerShown: false,
+    tabBarActiveTintColor: colors.primary,
+    tabBarInactiveTintColor: colors.textMuted,
+    tabBarStyle,
+    tabBarLabelStyle: {
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    tabBarIcon: ({ focused, color }) => {
+      let iconName;
+
+      if (route.name === 'Home') {
+        iconName = focused ? 'home' : 'home-outline';
+      } else if (route.name === 'Search') {
+        iconName = focused ? 'search' : 'search-outline';
+      } else if (route.name === 'Orders') {
+        iconName = focused ? 'receipt' : 'receipt-outline';
+      } else if (route.name === 'Profile') {
+        iconName = focused ? 'person' : 'person-outline';
+      }
+
+      return <Ionicons name={iconName} size={22} color={color} />;
+    },
+  }), [tabBarStyle]);
+
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.borderLight,
-          borderTopWidth: 1,
-          height: 60 + bottomInset,
-          paddingBottom: bottomInset,
-          paddingTop: 8,
-          elevation: 8,
-          shadowColor: colors.black,
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 4,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '700',
-        },
-        tabBarIcon: ({ focused, color }) => {
-          let iconName;
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Search') {
-            iconName = focused ? 'search' : 'search-outline';
-          } else if (route.name === 'Orders') {
-            iconName = focused ? 'receipt' : 'receipt-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          }
-
-          return <Ionicons name={iconName} size={22} color={color} />;
-        },
-      })}
-    >
+    <Tab.Navigator screenOptions={screenOptions}>
       <Tab.Screen
         name="Home"
         component={HomeScreen}

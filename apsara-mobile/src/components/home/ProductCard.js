@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 import { useCart } from '../../contexts/CartContext';
 
-export default function ProductCard({ product, onOpenVariants }) {
-  const { getProductTotalQuantity, getItemQuantity, addToCart, decrementItem } = useCart();
+export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
+  const { getProductTotalQuantity, getItemQuantity, addToCart, decrementItem, items } = useCart();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const imageOpacity = useRef(new Animated.Value(0)).current;
@@ -52,6 +52,34 @@ export default function ProductCard({ product, onOpenVariants }) {
     }
   };
 
+  const handleDecrement = () => {
+    if (isIceCream) {
+      const existing = (items || []).filter((i) => i.productId === product._id);
+      if (existing.length > 1) {
+        onOpenVariants(product);
+        return;
+      }
+      if (existing.length === 1) {
+        decrementItem(product._id, existing[0].variant);
+        return;
+      }
+    }
+    decrementItem(product._id, 'regular');
+  };
+
+  const handleIncrement = () => {
+    if (isIceCream) {
+      const existing = (items || []).filter((i) => i.productId === product._id);
+      if (existing.length === 1) {
+        addToCart(product, existing[0].variant, existing[0].price);
+        return;
+      }
+      onOpenVariants(product);
+      return;
+    }
+    addToCart(product, 'regular', regularResolved);
+  };
+
   return (
     <Animated.View
       style={[
@@ -69,7 +97,12 @@ export default function ProductCard({ product, onOpenVariants }) {
         },
       ]}
     >
-      <View style={styles.imageContainer}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={() => onOpenDetail && onOpenDetail(product)}
+        style={styles.cardTouchable}
+      >
+        <View style={styles.imageContainer}>
         {product.imageUrl ? (
           <Animated.Image
             source={{ uri: product.imageUrl }}
@@ -95,32 +128,21 @@ export default function ProductCard({ product, onOpenVariants }) {
 
         <View style={styles.floatingActionWrapper}>
           {totalQty > 0 ? (
-            isIceCream ? (
+            <View style={styles.stepperPill}>
               <TouchableOpacity
-                style={styles.customizedPill}
-                onPress={() => onOpenVariants(product)}
-                activeOpacity={0.85}
+                style={styles.stepperBtn}
+                onPress={handleDecrement}
               >
-                <Text style={styles.customizedText}>{totalQty} in cart</Text>
-                <Ionicons name="pencil" size={10} color={colors.primary} />
+                <Ionicons name="remove" size={14} color="#EC4899" />
               </TouchableOpacity>
-            ) : (
-              <View style={styles.stepperPill}>
-                <TouchableOpacity
-                  style={styles.stepperBtn}
-                  onPress={() => decrementItem(product._id, 'regular')}
-                >
-                  <Ionicons name="remove" size={14} color="#EC4899" />
-                </TouchableOpacity>
-                <Text style={styles.stepperNumber}>{totalQty}</Text>
-                <TouchableOpacity
-                  style={styles.stepperBtn}
-                  onPress={() => addToCart(product, 'regular', regularResolved)}
-                >
-                  <Ionicons name="add" size={14} color="#EC4899" />
-                </TouchableOpacity>
-              </View>
-            )
+              <Text style={styles.stepperNumber}>{totalQty}</Text>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={handleIncrement}
+              >
+                <Ionicons name="add" size={14} color="#EC4899" />
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity
               style={styles.addCircleBtn}
@@ -153,11 +175,15 @@ export default function ProductCard({ product, onOpenVariants }) {
           </View>
         </View>
       </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  cardTouchable: {
+    width: '100%',
+  },
   card: {
     backgroundColor: colors.white,
     borderRadius: 18,
