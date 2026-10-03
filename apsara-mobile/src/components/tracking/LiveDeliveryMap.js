@@ -1,10 +1,103 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import { View, StyleSheet, Text, Animated, Easing } from 'react-native';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme';
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
+
+const CLEAN_LIGHT_MAP_STYLE = [
+  {
+    elementType: 'geometry',
+    stylers: [{ color: '#FFFFFF' }],
+  },
+  {
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#64748B' }],
+  },
+  {
+    elementType: 'labels.text.stroke',
+    stylers: [{ color: '#FFFFFF' }],
+  },
+  {
+    featureType: 'administrative',
+    elementType: 'geometry',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'administrative.land_parcel',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'administrative.neighborhood',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#F8FAFC' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#E2E8F0' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#94A3B8' }],
+  },
+  {
+    featureType: 'road.arterial',
+    elementType: 'geometry',
+    stylers: [{ color: '#F1F5F9' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry',
+    stylers: [{ color: '#E2E8F0' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#CBD5E1' }],
+  },
+  {
+    featureType: 'transit',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#E0F2FE' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#0284C7' }],
+  },
+];
+
+const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 const fetchRoadRoute = async (fromLat, fromLng, toLat, toLng) => {
   try {
@@ -40,6 +133,8 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
 ) {
   const mapRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const lastFetchedRiderRef = useRef(null);
+  const lastFetchTimeRef = useRef(0);
 
   const [riderToCustomerRoute, setRiderToCustomerRoute] = useState([]);
   const [storeToRiderRoute, setStoreToRiderRoute] = useState([]);
@@ -62,51 +157,81 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
     longitudeDelta: Math.max(0.025, Math.abs(storeLocation.lng - customerLng) * 1.8),
   };
 
-  const loadRoutes = useCallback(async () => {
-    const [riderRoute, storeRoute] = await Promise.all([
-      fetchRoadRoute(currentRiderLat, currentRiderLng, customerLat, customerLng),
-      fetchRoadRoute(storeLocation.lat, storeLocation.lng, currentRiderLat, currentRiderLng),
-    ]);
-
-    if (riderRoute?.coords?.length > 0) {
-      setRiderToCustomerRoute(riderRoute.coords);
-      if (onRouteUpdate) {
-        onRouteUpdate({
-          distanceKm: Number((riderRoute.distanceMeters / 1000).toFixed(1)),
-          etaMinutes: Math.ceil(riderRoute.durationSeconds / 60),
-        });
+  const loadRoutes = useCallback(
+    async (force = false) => {
+      const now = Date.now();
+      if (!force && lastFetchedRiderRef.current) {
+        const dist = getDistanceMeters(
+          lastFetchedRiderRef.current.lat,
+          lastFetchedRiderRef.current.lng,
+          currentRiderLat,
+          currentRiderLng
+        );
+        if (dist < 60 && now - lastFetchTimeRef.current < 12000) {
+          return;
+        }
       }
-    } else {
-      setRiderToCustomerRoute([riderCoords, customerCoords]);
-    }
 
-    if (storeRoute?.coords?.length > 0) {
-      setStoreToRiderRoute(storeRoute.coords);
-    } else {
-      setStoreToRiderRoute([storeCoords, riderCoords]);
-    }
-  }, [currentRiderLat, currentRiderLng, customerLat, customerLng]);
+      lastFetchedRiderRef.current = { lat: currentRiderLat, lng: currentRiderLng };
+      lastFetchTimeRef.current = now;
+
+      const [riderRoute, storeRoute] = await Promise.all([
+        fetchRoadRoute(currentRiderLat, currentRiderLng, customerLat, customerLng),
+        fetchRoadRoute(storeLocation.lat, storeLocation.lng, currentRiderLat, currentRiderLng),
+      ]);
+
+      if (riderRoute?.coords?.length > 0) {
+        setRiderToCustomerRoute(riderRoute.coords);
+        if (onRouteUpdate) {
+          onRouteUpdate({
+            distanceKm: Number((riderRoute.distanceMeters / 1000).toFixed(1)),
+            etaMinutes: Math.ceil(riderRoute.durationSeconds / 60),
+          });
+        }
+      } else {
+        setRiderToCustomerRoute((prev) => (prev.length > 2 ? prev : [riderCoords, customerCoords]));
+      }
+
+      if (storeRoute?.coords?.length > 0) {
+        setStoreToRiderRoute(storeRoute.coords);
+      } else {
+        setStoreToRiderRoute((prev) => (prev.length > 2 ? prev : [storeCoords, riderCoords]));
+      }
+    },
+    [currentRiderLat, currentRiderLng, customerLat, customerLng, storeLocation.lat, storeLocation.lng]
+  );
 
   useEffect(() => {
-    loadRoutes();
-  }, [loadRoutes]);
+    loadRoutes(true);
+  }, [customerLat, customerLng, storeLocation.lat, storeLocation.lng]);
+
+  useEffect(() => {
+    loadRoutes(false);
+  }, [currentRiderLat, currentRiderLng]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const allCoords = [storeCoords, riderCoords, customerCoords];
+      mapRef.current?.fitToCoordinates(allCoords, {
+        edgePadding: { top: 90, right: 50, bottom: 260, left: 50 },
+        animated: true,
+      });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     recenter: () => {
-      mapRef.current?.animateToRegion(
-        {
-          latitude: currentRiderLat,
-          longitude: currentRiderLng,
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012,
-        },
-        500
-      );
+      const allCoords = [riderCoords, customerCoords];
+      mapRef.current?.fitToCoordinates(allCoords, {
+        edgePadding: { top: 100, right: 60, bottom: 270, left: 60 },
+        animated: true,
+      });
     },
     fitBounds: () => {
       const allCoords = [storeCoords, riderCoords, customerCoords];
       mapRef.current?.fitToCoordinates(allCoords, {
-        edgePadding: { top: 90, right: 50, bottom: 250, left: 50 },
+        edgePadding: { top: 90, right: 50, bottom: 260, left: 50 },
         animated: true,
       });
     },
@@ -131,48 +256,28 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
     ).start();
   }, [pulseAnim]);
 
-  useEffect(() => {
-    if (riderLocation?.lat && riderLocation?.lng) {
-      mapRef.current?.animateCamera(
-        {
-          center: { latitude: riderLocation.lat, longitude: riderLocation.lng },
-          heading: riderHeading,
-          pitch: 0,
-        },
-        { duration: 600 }
-      );
-    }
-  }, [riderLocation?.lat, riderLocation?.lng, riderHeading]);
-
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
-        mapType="none"
+        mapType="standard"
+        userInterfaceStyle="light"
+        customMapStyle={CLEAN_LIGHT_MAP_STYLE}
         showsCompass={false}
         showsTraffic={false}
-        showsBuildings={false}
+        showsBuildings={true}
         showsIndoors={false}
         showsMyLocationButton={false}
         rotateEnabled={false}
       >
-        <UrlTile
-          urlTemplate="https://tile.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png"
-          maximumZ={20}
-          minimumZ={0}
-          flipY={false}
-          zIndex={0}
-          tileSize={256}
-        />
-
         {storeToRiderRoute.length > 1 && (
           <Polyline
             coordinates={storeToRiderRoute}
-            strokeColor="#94A3B8"
-            strokeWidth={4}
-            lineDashPattern={[8, 6]}
+            strokeColor="#93C5FD"
+            strokeWidth={3.5}
+            lineDashPattern={[6, 6]}
             zIndex={1}
           />
         )}
@@ -180,15 +285,24 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
         {riderToCustomerRoute.length > 1 && (
           <Polyline
             coordinates={riderToCustomerRoute}
-            strokeColor="#1B5E4B"
-            strokeWidth={5}
-            lineCap="round"
-            lineJoin="round"
+            strokeColor="rgba(37, 99, 235, 0.22)"
+            strokeWidth={10}
             zIndex={2}
           />
         )}
 
-        <Marker coordinate={storeCoords} anchor={{ x: 0.5, y: 0.5 }} title="Apsara Store" zIndex={3}>
+        {riderToCustomerRoute.length > 1 && (
+          <Polyline
+            coordinates={riderToCustomerRoute}
+            strokeColor="#2563EB"
+            strokeWidth={5}
+            lineCap="round"
+            lineJoin="round"
+            zIndex={3}
+          />
+        )}
+
+        <Marker coordinate={storeCoords} anchor={{ x: 0.5, y: 0.5 }} title="Apsara Store" zIndex={4}>
           <View style={styles.storeMarkerWrap}>
             <View style={styles.storePin}>
               <Text style={styles.pinEmoji}>🏪</Text>
@@ -199,7 +313,7 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
           </View>
         </Marker>
 
-        <Marker coordinate={customerCoords} anchor={{ x: 0.5, y: 0.5 }} title="Delivery Destination" zIndex={3}>
+        <Marker coordinate={customerCoords} anchor={{ x: 0.5, y: 0.5 }} title="Delivery Destination" zIndex={4}>
           <View style={styles.customerMarkerWrap}>
             <View style={styles.customerPin}>
               <Text style={styles.pinEmoji}>🏠</Text>
@@ -216,7 +330,7 @@ const LiveDeliveryMap = forwardRef(function LiveDeliveryMap(
           title="Apsara Express Partner"
           flat={true}
           rotation={riderHeading}
-          zIndex={4}
+          zIndex={5}
         >
           <View style={styles.riderMarkerWrap}>
             <Animated.View
@@ -240,6 +354,7 @@ export default LiveDeliveryMap;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   map: {
     flex: 1,
@@ -248,12 +363,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   storePin: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.primary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
     borderWidth: 2.5,
-    borderColor: '#FFFFFF',
+    borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
@@ -263,7 +378,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   pinEmoji: {
-    fontSize: 20,
+    fontSize: 22,
   },
   storeTag: {
     marginTop: 4,
@@ -283,12 +398,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   customerPin: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#0F172A',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
     borderWidth: 2.5,
-    borderColor: '#FFFFFF',
+    borderColor: '#DC2626',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
@@ -322,19 +437,19 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#86EFAC',
-    opacity: 0.5,
+    backgroundColor: '#93C5FD',
+    opacity: 0.55,
   },
   riderPin: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: '#2563EB',
     borderWidth: 3,
-    borderColor: '#FDE047',
+    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 6,

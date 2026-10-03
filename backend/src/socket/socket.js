@@ -66,3 +66,7 @@ export const emitOffersUpdated = (offersData) => {
 export const emitProductsUpdated = (productData) => {
     if (io) io.emit("products_updated", productData || {});
 }
+
+export const emitRiderLocationUpdated = (orderId, locationData) => {
+    if (io) io.to(`order_${orderId}`).emit("rider_location_updated", locationData);
+}

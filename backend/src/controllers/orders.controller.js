@@ -9,7 +9,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { APIResponse }  from '../utils/api-response.js';
 import { APIError }     from '../utils/api-error.js';
 import { sendFCM }      from '../utils/send-fcm.js';
-import { emitNewOrder, emitStatusUpdate } from '../socket/socket.js';
+import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated } from '../socket/socket.js';
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
   key_id    : process.env.RAZORPAY_KEY_ID,
@@ -449,6 +449,13 @@ const updateRiderLocation = asyncHandler(async (req, res) => {
   };
 
   await order.save();
+
+  emitRiderLocationUpdated(order._id.toString(), {
+    lat: Number(lat),
+    lng: Number(lng),
+    heading: Number(heading || 0),
+    updatedAt: order.delivery.riderLocation.updatedAt,
+  });
 
   return res.status(200).json(new APIResponse(200, { success: true }, 'Rider location recorded'));
 });

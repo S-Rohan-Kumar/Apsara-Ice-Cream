@@ -74,6 +74,7 @@ export default function OrderTrackingScreen() {
   const [riderLocation, setRiderLocation] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [routeInfo, setRouteInfo] = useState(null);
+  const [geocodedLocation, setGeocodedLocation] = useState(null);
 
   const mapRef = useRef(null);
   const sheetHeight = useRef(new Animated.Value(SNAP_COLLAPSED)).current;
@@ -157,6 +158,29 @@ export default function OrderTrackingScreen() {
         if (ord.delivery?.riderLocation?.lat && ord.delivery?.riderLocation?.lng) {
           setRiderLocation(ord.delivery.riderLocation);
         }
+        if (ord.delivery?.location?.lat && ord.delivery?.location?.lng) {
+          setGeocodedLocation(ord.delivery.location);
+        } else if (ord.delivery?.address) {
+          const raw = typeof ord.delivery.address === 'string'
+            ? ord.delivery.address
+            : [ord.delivery.address.street, ord.delivery.address.city].filter(Boolean).join(', ');
+          if (raw && raw.trim().length > 3) {
+            const q = raw.toLowerCase().includes('bengaluru') || raw.toLowerCase().includes('bangalore') || raw.toLowerCase().includes('mandya')
+              ? raw
+              : `${raw}, Bengaluru`;
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`)
+              .then((r) => r.json())
+              .then((d) => {
+                if (d && d[0]?.lat && d[0]?.lon) {
+                  setGeocodedLocation({
+                    lat: parseFloat(d[0].lat),
+                    lng: parseFloat(d[0].lon),
+                  });
+                }
+              })
+              .catch(() => {});
+          }
+        }
       }
     } catch (e) {
     }
@@ -175,8 +199,8 @@ export default function OrderTrackingScreen() {
 
   const activeIndex = getStepIndex(currentStatus);
 
-  const customerLat = order?.delivery?.location?.lat || DEFAULT_CUSTOMER_LOCATION.lat;
-  const customerLng = order?.delivery?.location?.lng || DEFAULT_CUSTOMER_LOCATION.lng;
+  const customerLat = geocodedLocation?.lat || order?.delivery?.location?.lat || DEFAULT_CUSTOMER_LOCATION.lat;
+  const customerLng = geocodedLocation?.lng || order?.delivery?.location?.lng || DEFAULT_CUSTOMER_LOCATION.lng;
 
   const riderDistance = riderLocation?.lat && riderLocation?.lng
     ? calculateDistanceKm(riderLocation.lat, riderLocation.lng, customerLat, customerLng)
