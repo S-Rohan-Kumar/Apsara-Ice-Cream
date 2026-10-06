@@ -419,14 +419,14 @@ const getMonthlyReport = asyncHandler(async (req, res) => {
 
 // ─── GET /api/orders/rider-track/:id ──────────────────────────────────────────
 const getRiderOrderDetails = asyncHandler(async (req, res) => {
-  const { token } = req.query;
+  const clientToken = req.query?.token || req.headers['x-rider-token'] || req.body?.token;
   const order = await Order.findById(req.params.id)
     .select('orderNumber status delivery customer createdAt')
     .populate('customer', 'name phone');
 
   if (!order) throw new APIError(404, 'Order not found');
-  if (order.delivery?.riderTrackingToken && token && order.delivery.riderTrackingToken !== token) {
-    throw new APIError(403, 'Invalid rider tracking token');
+  if (order.delivery?.riderTrackingToken && clientToken !== order.delivery.riderTrackingToken) {
+    throw new APIError(403, 'Invalid or missing rider tracking token');
   }
 
   return res.status(200).json(new APIResponse(200, order, 'Rider order details fetched'));
@@ -437,8 +437,13 @@ const updateRiderLocation = asyncHandler(async (req, res) => {
   const { lat, lng, heading } = req.body;
   if (!lat || !lng) throw new APIError(400, 'lat and lng are required');
 
+  const clientToken = req.query?.token || req.headers['x-rider-token'] || req.body?.token;
   const order = await Order.findById(req.params.id);
   if (!order) throw new APIError(404, 'Order not found');
+
+  if (order.delivery?.riderTrackingToken && clientToken !== order.delivery.riderTrackingToken) {
+    throw new APIError(403, 'Invalid or missing rider tracking token');
+  }
 
   if (!order.delivery) order.delivery = {};
   order.delivery.riderLocation = {

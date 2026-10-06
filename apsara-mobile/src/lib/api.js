@@ -27,6 +27,25 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+let onUnauthorizedCallback = null;
+
+export const setOnUnauthorizedCallback = (cb) => {
+  onUnauthorizedCallback = cb;
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      await AsyncStorage.multiRemove(['user_token', 'user_data']).catch(() => {});
+      if (typeof onUnauthorizedCallback === 'function') {
+        onUnauthorizedCallback();
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const setApiBaseUrl = (newUrl) => {
   api.defaults.baseURL = newUrl;
 };

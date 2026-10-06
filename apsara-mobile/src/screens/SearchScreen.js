@@ -71,12 +71,13 @@ export default function SearchScreen() {
     setRecentSearches([]);
   };
 
-  const filtered = query.trim()
-    ? products.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query.toLowerCase()) ||
-          p.category?.name?.toLowerCase().includes(query.toLowerCase())
-      )
+  const cleanQuery = query.trim().toLowerCase();
+  const filtered = cleanQuery
+    ? products.filter((p) => {
+        const pName = (p?.name || '').toLowerCase();
+        const catName = (p?.category?.name || '').toLowerCase();
+        return pName.includes(cleanQuery) || catName.includes(cleanQuery);
+      })
     : [];
 
   return (

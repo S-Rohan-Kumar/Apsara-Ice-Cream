@@ -29,26 +29,29 @@ export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
   };
 
   const isIceCream = product.category?.productType === 'icecream';
+  const isAvailable = product.isAvailable !== false;
   const totalQty = isIceCream
     ? getProductTotalQuantity(product._id)
     : getItemQuantity(product._id, 'regular');
+
+  const regularBase = isIceCream
+    ? product.basePrices?.small || product.basePrices?.regular || product.priceOverride?.regular || product.category?.basePrice?.regular || 0
+    : product.basePrices?.regular || product.priceOverride?.regular || product.category?.basePrice?.regular || 0;
 
   const regularResolved = isIceCream
     ? product.resolvedPrices?.small || product.resolvedPrices?.regular || 0
     : product.resolvedPrices?.regular || 0;
 
-  const regularBase = isIceCream
-    ? product.basePrices?.small || product.basePrices?.regular || 0
-    : product.basePrices?.regular || 0;
-
+  const effectiveBasePrice = regularBase > 0 ? regularBase : regularResolved;
   const hasDiscount = Boolean(product.appliedOffer && regularBase > regularResolved);
   const showOfferBadge = Boolean(product.appliedOffer);
 
   const handleAddPress = () => {
+    if (!isAvailable) return;
     if (isIceCream) {
       onOpenVariants(product);
     } else {
-      addToCart(product, 'regular', regularResolved);
+      addToCart(product, 'regular', effectiveBasePrice);
     }
   };
 
@@ -68,6 +71,7 @@ export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
   };
 
   const handleIncrement = () => {
+    if (!isAvailable) return;
     if (isIceCream) {
       const existing = (items || []).filter((i) => i.productId === product._id);
       if (existing.length === 1) {
@@ -77,7 +81,7 @@ export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
       onOpenVariants(product);
       return;
     }
-    addToCart(product, 'regular', regularResolved);
+    addToCart(product, 'regular', effectiveBasePrice);
   };
 
   return (
@@ -122,12 +126,20 @@ export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
 
         {showOfferBadge && (
           <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{product.appliedOffer.discountPercent}% OFF</Text>
+            <Text style={styles.discountText}>
+              {product.appliedOffer.minOrderAmount > 0
+                ? `${product.appliedOffer.discountPercent}% OFF >₹${product.appliedOffer.minOrderAmount}`
+                : `${product.appliedOffer.discountPercent}% OFF`}
+            </Text>
           </View>
         )}
 
         <View style={styles.floatingActionWrapper}>
-          {totalQty > 0 ? (
+          {!isAvailable ? (
+            <View style={styles.outOfStockPill}>
+              <Text style={styles.outOfStockText}>Sold Out</Text>
+            </View>
+          ) : totalQty > 0 ? (
             <View style={styles.stepperPill}>
               <TouchableOpacity
                 style={styles.stepperBtn}
@@ -165,12 +177,12 @@ export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
         </Text>
 
         <View style={styles.pricingRow}>
-          {hasDiscount && (
-            <Text style={styles.strikethroughPrice}>₹{regularBase}</Text>
+          {hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && (
+            <Text style={styles.strikethroughPrice}>₹{effectiveBasePrice}</Text>
           )}
-          <View style={hasDiscount ? styles.discountedPriceBadge : styles.normalPriceBadge}>
-            <Text style={hasDiscount ? styles.discountedPriceText : styles.normalPriceText}>
-              ₹{regularResolved}{isIceCream ? '+' : ''}
+          <View style={hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) ? styles.discountedPriceBadge : styles.normalPriceBadge}>
+            <Text style={hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) ? styles.discountedPriceText : styles.normalPriceText}>
+              ₹{(!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && hasDiscount ? regularResolved : effectiveBasePrice}{isIceCream ? '+' : ''}
             </Text>
           </View>
         </View>
@@ -255,6 +267,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     right: 8,
+  },
+  outOfStockPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  outOfStockText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
   },
   addCircleBtn: {
     width: 34,

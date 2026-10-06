@@ -47,9 +47,10 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
             {variants.map((v) => {
               const meta = VARIANT_META[v] || { label: v, ml: '' };
               const price = product.resolvedPrices?.[v] || 0;
-              const basePrice = product.basePrices?.[v] || price;
+              const basePrice = product.basePrices?.[v] || product.priceOverride?.[v] || product.category?.basePrice?.[v] || price;
+              const effectivePrice = basePrice > 0 ? basePrice : price;
               const hasDiscount = Boolean(product.appliedOffer && basePrice > price);
-              const isAvailable = product.availableVariants?.[v] !== false;
+              const isAvailable = (product.variantAvailability?.[v] ?? product.availableVariants?.[v] ?? true) !== false && product.isAvailable !== false;
               const showOfferBadge = Boolean(product.appliedOffer);
               const qty = getItemQuantity(product._id, v);
 
@@ -74,7 +75,9 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
                       {showOfferBadge && (
                         <View style={styles.offerBadge}>
                           <Text style={styles.offerBadgeText}>
-                            {product.appliedOffer.discountPercent}% OFF
+                            {product.appliedOffer.minOrderAmount > 0
+                              ? `${product.appliedOffer.discountPercent}% OFF >₹${product.appliedOffer.minOrderAmount}`
+                              : `${product.appliedOffer.discountPercent}% OFF`}
                           </Text>
                         </View>
                       )}
@@ -82,11 +85,11 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
                     <Text style={styles.variantMl}>{meta.ml}</Text>
                     <View style={styles.priceRow}>
                       <Text style={[styles.variantPrice, !isAvailable && styles.disabledText]}>
-                        ₹{price}
+                        ₹{(!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && hasDiscount ? price : effectivePrice}
                       </Text>
-                      {hasDiscount && (
+                      {hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && (
                         <Text style={styles.variantOriginalPrice}>
-                          ₹{basePrice}
+                          ₹{effectivePrice}
                         </Text>
                       )}
                     </View>
@@ -108,7 +111,7 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
                         <Text style={styles.stepperValue}>{qty}</Text>
                         <TouchableOpacity
                           style={styles.stepperButton}
-                          onPress={() => addToCart(product, v, price)}
+                          onPress={() => addToCart(product, v, effectivePrice)}
                         >
                           <Ionicons name="add" size={14} color={colors.white} />
                         </TouchableOpacity>
@@ -116,7 +119,7 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
                     ) : (
                       <TouchableOpacity
                         style={styles.addButton}
-                        onPress={() => addToCart(product, v, price)}
+                        onPress={() => addToCart(product, v, effectivePrice)}
                         activeOpacity={0.8}
                       >
                         <Text style={styles.addButtonText}>ADD</Text>

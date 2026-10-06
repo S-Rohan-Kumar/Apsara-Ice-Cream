@@ -168,7 +168,12 @@ export default function OrderTrackingScreen() {
             const q = raw.toLowerCase().includes('bengaluru') || raw.toLowerCase().includes('bangalore') || raw.toLowerCase().includes('mandya')
               ? raw
               : `${raw}, Bengaluru`;
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`)
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, {
+              headers: {
+                'User-Agent': 'ApsaraMobileDeliveryApp/1.0',
+                'Accept': 'application/json',
+              },
+            })
               .then((r) => r.json())
               .then((d) => {
                 if (d && d[0]?.lat && d[0]?.lon) {
@@ -202,9 +207,13 @@ export default function OrderTrackingScreen() {
   const customerLat = geocodedLocation?.lat || order?.delivery?.location?.lat || DEFAULT_CUSTOMER_LOCATION.lat;
   const customerLng = geocodedLocation?.lng || order?.delivery?.location?.lng || DEFAULT_CUSTOMER_LOCATION.lng;
 
+  const currentStoreLocation = order?.storeLocation?.lat && order?.storeLocation?.lng
+    ? { lat: order.storeLocation.lat, lng: order.storeLocation.lng, title: order.storeLocation.name || 'Apsara Store' }
+    : MANDYA_STORE_LOCATION;
+
   const riderDistance = riderLocation?.lat && riderLocation?.lng
     ? calculateDistanceKm(riderLocation.lat, riderLocation.lng, customerLat, customerLng)
-    : calculateDistanceKm(MANDYA_STORE_LOCATION.lat, MANDYA_STORE_LOCATION.lng, customerLat, customerLng);
+    : calculateDistanceKm(currentStoreLocation.lat, currentStoreLocation.lng, customerLat, customerLng);
 
   const deliveryAddressText = order?.delivery?.address
     ? typeof order.delivery.address === 'string'
@@ -218,8 +227,11 @@ export default function OrderTrackingScreen() {
         ].filter(Boolean).join(', ')
     : 'Customer Delivery Address on Record';
 
+  const partnerPhone = order?.delivery?.riderPhone || order?.delivery?.riderContact || order?.delivery?.phone || '';
   const handleCallPartner = () => {
-    Linking.openURL('tel:+919876543210').catch(() => {});
+    if (partnerPhone) {
+      Linking.openURL(`tel:${partnerPhone}`).catch(() => {});
+    }
   };
 
   const handleRecenter = () => {
@@ -233,7 +245,7 @@ export default function OrderTrackingScreen() {
       <View style={styles.mapContainer}>
         <LiveDeliveryMap
           ref={mapRef}
-          storeLocation={MANDYA_STORE_LOCATION}
+          storeLocation={currentStoreLocation}
           customerLocation={{
             lat: customerLat,
             lng: customerLng,
@@ -258,7 +270,9 @@ export default function OrderTrackingScreen() {
             <View style={styles.statusDotSolid} />
           </View>
           <Text style={styles.floatingStatusText}>
-            {currentStatus === 'out_for_delivery'
+            {currentStatus === 'cancelled'
+              ? 'ORDER CANCELLED'
+              : currentStatus === 'out_for_delivery'
               ? 'RIDER EN ROUTE'
               : currentStatus === 'preparing'
               ? 'PACKING ICE CREAM'
@@ -297,7 +311,9 @@ export default function OrderTrackingScreen() {
                 <Text style={styles.superfastText}>SUPERFAST • COLD CHAIN</Text>
               </View>
               <Text style={styles.etaMainTitle}>
-                {currentStatus === 'delivered'
+                {currentStatus === 'cancelled'
+                  ? 'Order Cancelled'
+                  : currentStatus === 'delivered'
                   ? 'Delivered 🎉'
                   : currentStatus === 'out_for_delivery'
                   ? routeInfo

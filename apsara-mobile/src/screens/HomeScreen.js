@@ -208,16 +208,18 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!activeOrder?.orderId) return;
 
-    connectOrderSocket(activeOrder.orderId, (newStatus) => {
+    const handleStatusUpdate = (newStatus) => {
       if (newStatus === 'delivered' || newStatus === 'cancelled') {
         syncActiveOrderFromBackend();
       } else {
         updateActiveOrderStatus(newStatus);
       }
-    });
+    };
+
+    connectOrderSocket(activeOrder.orderId, handleStatusUpdate);
 
     return () => {
-      leaveOrderSocket(activeOrder.orderId);
+      leaveOrderSocket(activeOrder.orderId, handleStatusUpdate);
     };
   }, [activeOrder?.orderId, syncActiveOrderFromBackend, updateActiveOrderStatus]);
 

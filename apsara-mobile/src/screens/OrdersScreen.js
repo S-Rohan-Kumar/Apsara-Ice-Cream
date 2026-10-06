@@ -31,7 +31,23 @@ export default function OrdersScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
-  const { addToCart, syncActiveOrders } = useCart();
+  const { addToCart, reorderItems, syncActiveOrders } = useCart();
+
+  const formatOrderDate = (dateVal) => {
+    try {
+      if (!dateVal) return '';
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,13 +89,36 @@ export default function OrdersScreen() {
   };
 
   const handleReorder = (order) => {
-    order.items?.forEach((item) => {
-      addToCart(
-        { _id: item.product, name: item.productName },
-        item.variant,
-        item.unitPrice
-      );
-    });
+    if (reorderItems && Array.isArray(order?.items)) {
+      reorderItems(order.items);
+    } else {
+      order?.items?.forEach((item) => {
+        const prod = item.product || {};
+        const rawId = typeof prod === 'object' && prod !== null
+          ? (prod._id?._id || prod._id || prod.id || prod.productId)
+          : (item.product || item.productId);
+        const prodIdStr = rawId ? (typeof rawId === 'object' ? (rawId._id?.toString?.() || rawId.toString?.() || '') : rawId.toString()) : '';
+        if (!prodIdStr) return;
+        const rawCatId = item.categoryId || (typeof prod === 'object' ? (prod.category?._id || prod.category || prod.categoryId) : null);
+        const catIdStr = rawCatId ? (rawCatId._id ? rawCatId._id.toString() : rawCatId.toString()) : null;
+        const v = (item.variant === 'single' ? 'regular' : item.variant) || 'regular';
+        const unitPrice = typeof item.unitPrice === 'number' && item.unitPrice > 0 ? item.unitPrice : (item.price || 0);
+        const qty = typeof item.quantity === 'number' && item.quantity > 0 ? item.quantity : 1;
+        addToCart(
+          {
+            _id: prodIdStr,
+            name: item.productName || (typeof prod === 'object' ? prod.name : '') || '',
+            imageUrl: item.imageUrl || (typeof prod === 'object' ? prod.imageUrl : '') || '',
+            categoryId: catIdStr,
+            categoryName: item.categoryName || (typeof prod === 'object' ? prod.category?.name : '') || '',
+            isZeroSugar: item.isZeroSugar ?? (typeof prod === 'object' ? prod.isZeroSugar : false) ?? false,
+          },
+          v,
+          unitPrice,
+          qty
+        );
+      });
+    }
     navigation.navigate('Cart');
   };
 
@@ -145,12 +184,7 @@ export default function OrdersScreen() {
                   <View>
                     <Text style={styles.orderNumber}>Order #{item.orderNumber}</Text>
                     <Text style={styles.orderDate}>
-                      {new Date(item.createdAt).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatOrderDate(item.createdAt)}
                     </Text>
                   </View>
 

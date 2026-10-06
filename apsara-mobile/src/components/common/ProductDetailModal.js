@@ -106,27 +106,30 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
   if (!visible && !isClosingRef.current) return null;
 
   const currentProduct = activeProduct || product || {};
+  const isAvailable = currentProduct.isAvailable !== false;
   const isIceCream = currentProduct.category?.productType === 'icecream';
   const totalQty = isIceCream
     ? getProductTotalQuantity(currentProduct._id)
     : getItemQuantity(currentProduct._id, 'regular');
 
+  const regularBase = isIceCream
+    ? currentProduct.basePrices?.small || currentProduct.basePrices?.regular || currentProduct.priceOverride?.regular || currentProduct.category?.basePrice?.regular || 0
+    : currentProduct.basePrices?.regular || currentProduct.priceOverride?.regular || currentProduct.category?.basePrice?.regular || 0;
+
   const regularResolved = isIceCream
     ? currentProduct.resolvedPrices?.small || currentProduct.resolvedPrices?.regular || 0
     : currentProduct.resolvedPrices?.regular || 0;
 
-  const regularBase = isIceCream
-    ? currentProduct.basePrices?.small || currentProduct.basePrices?.regular || 0
-    : currentProduct.basePrices?.regular || 0;
-
+  const effectiveBasePrice = regularBase > 0 ? regularBase : regularResolved;
   const hasDiscount = Boolean(currentProduct.appliedOffer && regularBase > regularResolved);
 
   const handleAddPress = () => {
+    if (!isAvailable) return;
     if (isIceCream) {
       handleClose();
       if (onOpenVariantsRef.current) onOpenVariantsRef.current(currentProduct);
     } else {
-      addToCart(currentProduct, 'regular', regularResolved);
+      addToCart(currentProduct, 'regular', effectiveBasePrice);
     }
   };
 
@@ -147,6 +150,7 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
   };
 
   const handleIncrement = () => {
+    if (!isAvailable) return;
     if (isIceCream) {
       const existing = (items || []).filter((i) => i.productId === currentProduct._id);
       if (existing.length === 1) {
@@ -157,7 +161,7 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
       if (onOpenVariantsRef.current) onOpenVariantsRef.current(currentProduct);
       return;
     }
-    addToCart(currentProduct, 'regular', regularResolved);
+    addToCart(currentProduct, 'regular', effectiveBasePrice);
   };
 
   const defaultDescription = isIceCream
@@ -243,9 +247,11 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
                 <View style={styles.titleCol}>
                   <Text style={styles.productName}>{currentProduct.name}</Text>
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceText}>₹{regularResolved}</Text>
-                    {hasDiscount && (
-                      <Text style={styles.strikethroughPrice}>₹{regularBase}</Text>
+                    <Text style={styles.priceText}>
+                      ₹{(!currentProduct.appliedOffer?.minOrderAmount || currentProduct.appliedOffer?.minOrderAmount === 0) && hasDiscount ? regularResolved : effectiveBasePrice}
+                    </Text>
+                    {hasDiscount && (!currentProduct.appliedOffer?.minOrderAmount || currentProduct.appliedOffer?.minOrderAmount === 0) && (
+                      <Text style={styles.strikethroughPrice}>₹{effectiveBasePrice}</Text>
                     )}
                     {isIceCream && (
                       <View style={styles.startingBadge}>
@@ -256,7 +262,11 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
                 </View>
 
                 <View style={styles.actionCol}>
-                  {totalQty > 0 ? (
+                  {!isAvailable ? (
+                    <View style={styles.outOfStockPill}>
+                      <Text style={styles.outOfStockText}>Sold Out</Text>
+                    </View>
+                  ) : totalQty > 0 ? (
                     <View style={styles.stepperPill}>
                       <TouchableOpacity
                         style={styles.stepperBtn}
@@ -442,6 +452,22 @@ const styles = StyleSheet.create({
   actionCol: {
     alignItems: 'flex-end',
     justifyContent: 'center',
+  },
+  outOfStockPill: {
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  outOfStockText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
   },
   addBtn: {
     minWidth: 88,

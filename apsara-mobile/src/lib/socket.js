@@ -13,7 +13,17 @@ const socket = io(getSocketUrl(), {
   transports: ['websocket', 'polling'],
 });
 
+const activeOrderRooms = new Set();
+
+socket.on('connect', () => {
+  activeOrderRooms.forEach((orderId) => {
+    socket.emit('join_order', orderId);
+  });
+});
+
 export const connectOrderSocket = (orderId, callback) => {
+  if (!orderId) return;
+  activeOrderRooms.add(orderId);
   if (!socket.connected) {
     socket.connect();
   }
@@ -24,13 +34,20 @@ export const connectOrderSocket = (orderId, callback) => {
 };
 
 export const leaveOrderSocket = (orderId, callback) => {
-  socket.emit('leave_order', orderId);
+  if (orderId) {
+    activeOrderRooms.delete(orderId);
+    socket.emit('leave_order', orderId);
+  }
   if (callback) {
     socket.off('status_update', callback);
+  } else {
+    socket.off('status_update');
   }
 };
 
 export const connectRiderTracking = (orderId, callback) => {
+  if (!orderId) return;
+  activeOrderRooms.add(orderId);
   if (!socket.connected) {
     socket.connect();
   }
@@ -41,8 +58,14 @@ export const connectRiderTracking = (orderId, callback) => {
 };
 
 export const leaveRiderTracking = (orderId, callback) => {
+  if (orderId) {
+    activeOrderRooms.delete(orderId);
+    socket.emit('leave_order', orderId);
+  }
   if (callback) {
     socket.off('rider_location_updated', callback);
+  } else {
+    socket.off('rider_location_updated');
   }
 };
 

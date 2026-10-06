@@ -43,6 +43,7 @@ export default function CartScreen() {
     removeUnavailableItems,
     clearCart,
     saveActiveOrder,
+    syncLivePrices,
   } = useCart();
   const { address, flatNo, landmark, phone, coords, isLocating, detectLocation, updateLocation } = useLocation();
   const { isAuthenticated } = useAuth();
@@ -78,10 +79,14 @@ export default function CartScreen() {
   const verifyLiveStock = useCallback(async () => {
     try {
       const res = await api.get('/products');
-      setLiveProducts(res.data?.data || []);
+      const prods = res.data?.data || [];
+      setLiveProducts(prods);
+      if (syncLivePrices) {
+        syncLivePrices(prods);
+      }
     } catch (e) {
     }
-  }, []);
+  }, [syncLivePrices]);
 
   useEffect(() => {
     fetchActiveOffers();
@@ -122,9 +127,14 @@ export default function CartScreen() {
 
   if (activeOffers.length > 0 && items.length > 0) {
     for (const off of activeOffers) {
-      const targetCatId = off.category ? (off.category._id || off.category).toString() : null;
+      const rawTargetCat = off.category ? (off.category._id || off.category) : null;
+      const targetCatId = rawTargetCat ? (rawTargetCat._id ? rawTargetCat._id.toString() : rawTargetCat.toString()) : null;
       const qualifyingItems = targetCatId
-        ? items.filter((it) => (it.categoryId ? it.categoryId.toString() : '') === targetCatId)
+        ? items.filter((it) => {
+            const rawCat = it.categoryId ? (it.categoryId._id || it.categoryId) : null;
+            const itCat = rawCat ? rawCat.toString() : (it.categoryId ? it.categoryId.toString() : '');
+            return itCat === targetCatId;
+          })
         : items;
 
       const catSubtotal = qualifyingItems.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 0), 0);
@@ -152,7 +162,15 @@ export default function CartScreen() {
 
   const getUnavailableStatus = (item) => {
     if (!liveProducts) return null;
-    const matched = liveProducts.find((p) => (p._id?.toString?.() || p._id) === (item.productId?.toString?.() || item.productId));
+    const rawItemId = typeof item.productId === 'object' && item.productId !== null
+      ? (item.productId._id || item.productId.id || item.productId)
+      : item.productId;
+    const itemProdId = rawItemId ? (rawItemId._id?.toString?.() || rawItemId.toString?.() || '') : '';
+    const matched = liveProducts.find((p) => {
+      const rawPId = typeof p._id === 'object' && p._id !== null ? (p._id._id || p._id.id || p._id) : p._id;
+      const pId = rawPId ? (rawPId._id?.toString?.() || rawPId.toString?.() || '') : '';
+      return pId === itemProdId;
+    });
     if (!matched) {
       return 'Item no longer available';
     }
@@ -160,16 +178,17 @@ export default function CartScreen() {
       return 'Out of stock';
     }
     if (matched.category?.productType === 'icecream') {
+      const v = item.variant === 'single' ? 'regular' : item.variant;
       let isVarAvail = true;
       if (Array.isArray(matched.availableVariants)) {
-        isVarAvail = matched.availableVariants.includes(item.variant);
+        isVarAvail = matched.availableVariants.includes(v);
       } else if (matched.availableVariants && typeof matched.availableVariants === 'object') {
-        isVarAvail = matched.availableVariants[item.variant] !== false;
+        isVarAvail = matched.availableVariants[v] !== false;
       } else if (matched.variantAvailability && typeof matched.variantAvailability === 'object') {
-        isVarAvail = matched.variantAvailability[item.variant] !== false;
+        isVarAvail = matched.variantAvailability[v] !== false;
       }
       if (!isVarAvail) {
-        return `${item.variant.toUpperCase()} size out of stock`;
+        return `${v.toUpperCase()} size out of stock`;
       }
     }
     return null;
@@ -233,12 +252,18 @@ export default function CartScreen() {
     try {
       setIsSubmitting(true);
 
-      const orderItems = items.map((i) => ({
-        productId: i.productId,
-        variant: i.variant,
-        quantity: i.quantity,
-        imageUrl: i.imageUrl,
-      }));
+      const orderItems = items.map((i) => {
+        const rawId = typeof i.productId === 'object' && i.productId !== null
+          ? (i.productId._id || i.productId.id || i.productId)
+          : i.productId;
+        const prodIdStr = rawId ? (rawId._id?.toString?.() || rawId.toString?.() || '') : '';
+        return {
+          productId: prodIdStr,
+          variant: i.variant === 'single' ? 'regular' : i.variant,
+          quantity: i.quantity,
+          imageUrl: i.imageUrl,
+        };
+      });
 
       const confirmRes = await api.post('/orders/confirm', {
         items: orderItems,

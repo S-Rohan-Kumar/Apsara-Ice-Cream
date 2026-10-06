@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../lib/api';
+import api, { setOnUnauthorizedCallback } from '../lib/api';
 import { syncFcmTokenWithBackend, unregisterPushNotificationsAsync } from '../lib/notifications';
 
 const AuthContext = createContext(null);
@@ -11,6 +11,10 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    setOnUnauthorizedCallback(() => {
+      setToken(null);
+      setUser(null);
+    });
     loadStoredAuth();
   }, []);
 
@@ -28,7 +32,13 @@ export const AuthProvider = ({ children }) => {
             setUser(data.data);
             await AsyncStorage.setItem('user_data', JSON.stringify(data.data));
           }
-        } catch (e) {}
+        } catch (e) {
+          if (e.response?.status === 401) {
+            setToken(null);
+            setUser(null);
+            await AsyncStorage.multiRemove(['user_token', 'user_data']).catch(() => {});
+          }
+        }
       }
     } catch (e) {
     } finally {

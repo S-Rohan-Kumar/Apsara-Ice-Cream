@@ -45,9 +45,13 @@ export const LocationProvider = ({ children }) => {
     setFlatNo(newFlat);
     setLandmark(newLandmark);
     if (newPhone) setPhone(newPhone);
-    if (newCoords) {
+    if (newCoords !== undefined) {
       setCoords(newCoords);
-      await AsyncStorage.setItem('user_coords', JSON.stringify(newCoords));
+      if (newCoords) {
+        await AsyncStorage.setItem('user_coords', JSON.stringify(newCoords));
+      } else {
+        await AsyncStorage.removeItem('user_coords');
+      }
     }
     await AsyncStorage.setItem('user_address', newAddress);
     await AsyncStorage.setItem('user_flat_no', newFlat);
