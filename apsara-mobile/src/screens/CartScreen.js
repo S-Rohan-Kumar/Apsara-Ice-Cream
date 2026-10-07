@@ -286,6 +286,7 @@ export default function CartScreen() {
       clearCart();
 
       navigation.replace('OrderTracking', {
+        order,
         orderId: order._id,
         orderNumber: order.orderNumber,
       });

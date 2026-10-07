@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 import api from '../../lib/api';
+import { optimizeCloudinaryUrl } from '../../lib/productImageCache';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - spacing.lg * 2;
@@ -191,7 +192,7 @@ export default function BannerCarousel({ offers, onBannerPress }) {
             activeOpacity={0.92}
           >
             <Image
-              source={{ uri: banner.imageUrl }}
+              source={{ uri: optimizeCloudinaryUrl(banner.imageUrl, 200) }}
               style={styles.atmosphericBackdrop}
               blurRadius={24}
               resizeMode="cover"
@@ -228,7 +229,7 @@ export default function BannerCarousel({ offers, onBannerPress }) {
                 <View style={[styles.spotlightHalo, { borderColor: banner.haloColor }]}>
                   <View style={styles.spotlightPlate} />
                   <Image
-                    source={{ uri: banner.imageUrl }}
+                    source={{ uri: optimizeCloudinaryUrl(banner.imageUrl, 500) }}
                     style={styles.spotlightProductImg}
                     resizeMode="cover"
                   />

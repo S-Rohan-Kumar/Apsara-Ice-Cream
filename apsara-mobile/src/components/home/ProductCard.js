@@ -3,8 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'reac
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 import { useCart } from '../../contexts/CartContext';
+import { optimizeCloudinaryUrl } from '../../lib/productImageCache';
 
-export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
+function ProductCard({ product, onOpenVariants, onOpenDetail }) {
   const { getProductTotalQuantity, getItemQuantity, addToCart, decrementItem, items } = useCart();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -109,7 +110,7 @@ export default function ProductCard({ product, onOpenVariants, onOpenDetail }) {
         <View style={styles.imageContainer}>
         {product.imageUrl ? (
           <Animated.Image
-            source={{ uri: product.imageUrl }}
+            source={{ uri: optimizeCloudinaryUrl(product.imageUrl, 400) }}
             style={[styles.image, { opacity: imageOpacity }]}
             onLoad={handleImageLoad}
             resizeMode="cover"
@@ -403,3 +404,5 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 });
+
+export default React.memo(ProductCard);

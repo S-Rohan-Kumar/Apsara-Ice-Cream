@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import socket, { connectOrderSocket } from '../lib/socket';
 
 const CartContext = createContext(null);
 
@@ -18,6 +19,43 @@ export const CartProvider = ({ children }) => {
       AsyncStorage.setItem('apsara_cart', JSON.stringify(items)).catch(() => {});
     }
   }, [items, isLoaded]);
+
+  useEffect(() => {
+    const handleStatusUpdate = (data) => {
+      if (!data) return;
+      const targetId = typeof data === 'object' ? (data.orderId || data._id) : null;
+      const newStatus = typeof data === 'object' ? data.status : data;
+      if (newStatus) {
+        updateActiveOrderStatus(targetId, newStatus);
+      }
+    };
+
+    socket.on('order_status_updated', handleStatusUpdate);
+    socket.on('status_update', handleStatusUpdate);
+
+    return () => {
+      socket.off('order_status_updated', handleStatusUpdate);
+      socket.off('status_update', handleStatusUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    const ids = [];
+    if (activeOrder) {
+      const aId = (activeOrder.orderId || activeOrder._id)?.toString?.();
+      if (aId) ids.push(aId);
+    }
+    if (Array.isArray(activeOrders)) {
+      activeOrders.forEach((o) => {
+        const oId = (o.orderId || o._id)?.toString?.();
+        if (oId) ids.push(oId);
+      });
+    }
+    const uniqueIds = [...new Set(ids)];
+    uniqueIds.forEach((id) => {
+      connectOrderSocket(id);
+    });
+  }, [activeOrder, activeOrders]);
 
   const loadCart = async () => {
     try {
@@ -49,16 +87,6 @@ export const CartProvider = ({ children }) => {
   const saveActiveOrder = (orderData) => {
     setActiveOrder((prev) => {
       if (!orderData && !prev) return null;
-      if (
-        orderData &&
-        prev &&
-        prev.orderId === orderData.orderId &&
-        prev.status === orderData.status &&
-        prev.total === orderData.total &&
-        prev.activeCount === orderData.activeCount
-      ) {
-        return prev;
-      }
       if (orderData) {
         AsyncStorage.setItem('apsara_active_order', JSON.stringify(orderData)).catch(() => {});
       } else {
@@ -66,17 +94,52 @@ export const CartProvider = ({ children }) => {
       }
       return orderData;
     });
+
+    if (orderData) {
+      setActiveOrders((prevOrders) => {
+        const list = Array.isArray(prevOrders) ? prevOrders : [];
+        const exists = list.some((o) => (o.orderId || o._id)?.toString?.() === (orderData.orderId || orderData._id)?.toString?.());
+        const updated = exists
+          ? list.map((o) => ((o.orderId || o._id)?.toString?.() === (orderData.orderId || orderData._id)?.toString?.() ? { ...o, ...orderData } : o))
+          : [orderData, ...list];
+        AsyncStorage.setItem('apsara_active_orders', JSON.stringify(updated)).catch(() => {});
+        return updated;
+      });
+    }
   };
 
-  const updateActiveOrderStatus = (newStatus) => {
+  const updateActiveOrderStatus = (orderIdOrStatus, maybeStatus) => {
+    const newStatus = maybeStatus !== undefined ? maybeStatus : orderIdOrStatus;
+    const targetOrderId = maybeStatus !== undefined && orderIdOrStatus ? orderIdOrStatus.toString() : null;
+
+    setActiveOrders((prevOrders) => {
+      if (!Array.isArray(prevOrders) || prevOrders.length === 0) return [];
+      const updatedList = prevOrders
+        .map((ord) => {
+          const ordId = (ord.orderId || ord._id)?.toString?.();
+          if (!targetOrderId || ordId === targetOrderId) {
+            return { ...ord, status: newStatus, orderStatus: newStatus };
+          }
+          return ord;
+        })
+        .filter((ord) => ['placed', 'preparing', 'out_for_delivery'].includes(ord.status));
+
+      AsyncStorage.setItem('apsara_active_orders', JSON.stringify(updatedList)).catch(() => {});
+      return updatedList;
+    });
+
     setActiveOrder((prev) => {
       if (!prev) return null;
-      const updated = { ...prev, status: newStatus };
+      const prevId = (prev.orderId || prev._id)?.toString?.();
+      if (targetOrderId && prevId !== targetOrderId) {
+        return prev;
+      }
       if (newStatus === 'delivered' || newStatus === 'cancelled') {
         AsyncStorage.removeItem('apsara_active_order').catch(() => {});
-      } else {
-        AsyncStorage.setItem('apsara_active_order', JSON.stringify(updated)).catch(() => {});
+        return null;
       }
+      const updated = { ...prev, status: newStatus, orderStatus: newStatus };
+      AsyncStorage.setItem('apsara_active_order', JSON.stringify(updated)).catch(() => {});
       return updated;
     });
   };

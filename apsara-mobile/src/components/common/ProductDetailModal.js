@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../../theme';
 import { useCart } from '../../contexts/CartContext';
+import { optimizeCloudinaryUrl } from '../../lib/productImageCache';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -224,7 +225,7 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
             <View style={styles.imageWrap} {...panResponder.panHandlers}>
               {currentProduct.imageUrl ? (
                 <Image
-                  source={{ uri: currentProduct.imageUrl }}
+                  source={{ uri: optimizeCloudinaryUrl(currentProduct.imageUrl, 600) }}
                   style={styles.productImage}
                   resizeMode="contain"
                   fadeDuration={0}

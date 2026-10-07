@@ -17,6 +17,7 @@ import { colors, spacing, radius, fontSize } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import api from '../lib/api';
+import socket from '../lib/socket';
 import { ensureProductImageCache, getCachedProductImage } from '../lib/productImageCache';
 
 const STATUS_COLORS = {
@@ -76,6 +77,33 @@ export default function OrdersScreen() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  useEffect(() => {
+    const handleOrderStatusUpdate = (data) => {
+      if (!data) return;
+      const targetId = typeof data === 'object' ? (data.orderId || data._id) : null;
+      const newStatus = typeof data === 'object' ? data.status : data;
+      if (newStatus) {
+        setOrders((prev) =>
+          prev.map((ord) => {
+            const ordId = (ord._id || ord.orderId)?.toString?.();
+            if (targetId && ordId === targetId.toString()) {
+              return { ...ord, status: newStatus, orderStatus: newStatus };
+            }
+            return ord;
+          })
+        );
+      }
+    };
+
+    socket.on('order_status_updated', handleOrderStatusUpdate);
+    socket.on('status_update', handleOrderStatusUpdate);
+
+    return () => {
+      socket.off('order_status_updated', handleOrderStatusUpdate);
+      socket.off('status_update', handleOrderStatusUpdate);
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors, spacing, radius, fontSize } from '../theme';
+import { useCart } from '../contexts/CartContext';
 import api from '../lib/api';
 import { ensureProductImageCache, getCachedProductImage } from '../lib/productImageCache';
 import {
@@ -67,14 +68,28 @@ export default function OrderTrackingScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { orderId, orderNumber } = route.params || {};
+  const { updateActiveOrderStatus } = useCart();
+  const { orderId, orderNumber, order: initialOrder } = route.params || {};
 
-  const [order, setOrder] = useState(null);
-  const [currentStatus, setCurrentStatus] = useState('placed');
-  const [riderLocation, setRiderLocation] = useState(null);
+  const resolvedOrderId = (
+    (typeof orderId === 'object' && orderId !== null ? (orderId._id || orderId.orderId || orderId.id) : orderId) ||
+    initialOrder?._id ||
+    initialOrder?.orderId ||
+    ''
+  )?.toString?.() || '';
+
+  const [order, setOrder] = useState(initialOrder || null);
+  const [currentStatus, setCurrentStatus] = useState(
+    initialOrder?.status || initialOrder?.orderStatus || 'placed'
+  );
+  const [riderLocation, setRiderLocation] = useState(
+    initialOrder?.delivery?.riderLocation || null
+  );
   const [isExpanded, setIsExpanded] = useState(false);
   const [routeInfo, setRouteInfo] = useState(null);
-  const [geocodedLocation, setGeocodedLocation] = useState(null);
+  const [geocodedLocation, setGeocodedLocation] = useState(
+    initialOrder?.delivery?.location || null
+  );
 
   const mapRef = useRef(null);
   const sheetHeight = useRef(new Animated.Value(SNAP_COLLAPSED)).current;
@@ -121,36 +136,94 @@ export default function OrderTrackingScreen() {
   useEffect(() => {
     loadOrderDetails();
 
-    if (!orderId) return;
+    if (!resolvedOrderId) return;
 
-    connectOrderSocket(orderId, (newStatus) => {
-      setCurrentStatus(newStatus);
-    });
-
-    const handleRiderUpdate = (data) => {
-      if (data?.lat && data?.lng) {
-        setRiderLocation({
-          lat: data.lat,
-          lng: data.lng,
-          heading: data.heading || 0,
-          updatedAt: data.updatedAt || new Date(),
-        });
+    const handleStatus = (data) => {
+      const statusVal = typeof data === 'object' ? data.status : data;
+      const targetId = typeof data === 'object' ? (data.orderId || data._id)?.toString?.() : null;
+      if (targetId && resolvedOrderId && targetId !== resolvedOrderId) {
+        return;
+      }
+      if (statusVal) {
+        setCurrentStatus(statusVal);
+        setOrder((prev) => (prev ? { ...prev, status: statusVal, orderStatus: statusVal } : prev));
+        if (updateActiveOrderStatus) {
+          updateActiveOrderStatus(resolvedOrderId, statusVal);
+        }
       }
     };
 
-    connectRiderTracking(orderId, handleRiderUpdate);
+    connectOrderSocket(resolvedOrderId, handleStatus);
+
+    const handleRiderUpdate = (data) => {
+      if (!data) return;
+      const targetId = data.orderId?.toString?.();
+      if (targetId && resolvedOrderId && targetId !== resolvedOrderId) {
+        return;
+      }
+      if (data.lat && data.lng) {
+        const nextLoc = {
+          lat: Number(data.lat),
+          lng: Number(data.lng),
+          heading: Number(data.heading || 0),
+          updatedAt: data.updatedAt || new Date(),
+        };
+        setRiderLocation(nextLoc);
+        setOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                delivery: {
+                  ...(prev.delivery || {}),
+                  riderLocation: nextLoc,
+                },
+              }
+            : prev
+        );
+      }
+    };
+
+    connectRiderTracking(resolvedOrderId, handleRiderUpdate);
 
     return () => {
-      leaveOrderSocket(orderId);
-      leaveRiderTracking(orderId, handleRiderUpdate);
+      leaveOrderSocket(resolvedOrderId, handleStatus);
+      leaveRiderTracking(resolvedOrderId, handleRiderUpdate);
     };
-  }, [orderId]);
+  }, [resolvedOrderId]);
+
+  useEffect(() => {
+    if (!resolvedOrderId) return;
+    if (['delivered', 'cancelled'].includes(currentStatus)) return;
+
+    const interval = setInterval(() => {
+      api.get(`/orders/${resolvedOrderId}`)
+        .then((res) => {
+          const ord = res.data?.data;
+          if (ord) {
+            const st = ord.status || ord.orderStatus;
+            if (st && st !== currentStatus) {
+              setCurrentStatus(st);
+              setOrder(ord);
+              if (updateActiveOrderStatus) {
+                updateActiveOrderStatus(resolvedOrderId, st);
+              }
+            }
+            if (ord.delivery?.riderLocation?.lat && ord.delivery?.riderLocation?.lng) {
+              setRiderLocation(ord.delivery.riderLocation);
+            }
+          }
+        })
+        .catch(() => {});
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [resolvedOrderId, currentStatus, updateActiveOrderStatus]);
 
   const loadOrderDetails = async () => {
-    if (!orderId) return;
+    if (!resolvedOrderId) return;
     try {
       await ensureProductImageCache();
-      const res = await api.get(`/orders/${orderId}`);
+      const res = await api.get(`/orders/${resolvedOrderId}`);
       if (res.data?.data) {
         const ord = res.data.data;
         setOrder(ord);

@@ -151,15 +151,25 @@ const initiateOrder = asyncHandler(async (req, res) => {
 
 // ─── POST /api/orders/confirm ─────────────────────────────────────────────────
 const confirmOrder = asyncHandler(async (req, res) => {
-  const storeSettings = await StoreSettings.findOne();
-  if (storeSettings && storeSettings.isStoreOpen === false) {
-    throw new APIError(400, storeSettings.closedNotice || 'Store is currently closed and not accepting orders.');
-  }
-
   const {
     razorpayOrderId, razorpayPaymentId, razorpaySignature,
     items, deliveryAddress, deliveryPhone, deliveryLocation, paymentMethod,
   } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new APIError(400, 'Order must have at least one item');
+  }
+
+  const now = new Date();
+  const [storeSettings, activeOffers, productMap] = await Promise.all([
+    StoreSettings.findOne(),
+    Offer.find({ isActive: true, startsAt: { $lte: now }, expiresAt: { $gte: now } }),
+    fetchProductsMap(items),
+  ]);
+
+  if (storeSettings && storeSettings.isStoreOpen === false) {
+    throw new APIError(400, storeSettings.closedNotice || 'Store is currently closed and not accepting orders.');
+  }
 
   // Signature check only for online payments
   if (paymentMethod === 'online' && razorpayOrderId) {
@@ -174,10 +184,6 @@ const confirmOrder = asyncHandler(async (req, res) => {
     const existing = await Order.findOne({ 'payment.razorpayOrderId': razorpayOrderId });
     if (existing) throw new APIError(409, 'Order already confirmed');
   }
-
-  const now          = new Date();
-  const activeOffers = await Offer.find({ isActive:true, startsAt:{$lte:now}, expiresAt:{$gte:now} });
-  const productMap   = await fetchProductsMap(items); 
 
   const { orderItems, subtotal, discount } = calculateOrderPricing(items, productMap, activeOffers);
 
@@ -228,28 +234,40 @@ const confirmOrder = asyncHandler(async (req, res) => {
     },
   });
 
-  // Notify admin
-  const populatedOrder = await Order.findById(order._id).populate('customer', 'name phone');
+  // Notify admin via socket immediately
+  const populatedOrder = order.toObject ? order.toObject() : { ...order };
+  populatedOrder.customer = {
+    _id: req.user._id,
+    name: req.user.name || '',
+    phone: req.user.phone || '',
+  };
   emitNewOrder(populatedOrder);
 
-  const adminUser = await User.findOne({ role: 'admin' });
-  if (adminUser?.fcmToken) {
-    await sendFCM(
-      adminUser.fcmToken,
-      `🍦 New Order ${orderNumber}`,
-      `${paymentMethod.toUpperCase()} order from ${req.user.phone}`,
-      { type:'new_order', orderId:order._id.toString(), orderNumber }
-    );
-  }
+  // Background non-blocking FCM notifications so customer checkout is instant
+  setImmediate(async () => {
+    try {
+      const adminUser = await User.findOne({ role: 'admin' });
+      if (adminUser?.fcmToken) {
+        await sendFCM(
+          adminUser.fcmToken,
+          `🍦 New Order ${orderNumber}`,
+          `${paymentMethod.toUpperCase()} order from ${req.user.phone}`,
+          { type: 'new_order', orderId: order._id.toString(), orderNumber }
+        ).catch(() => {});
+      }
 
-  if (req.user.fcmToken) {
-    await sendFCM(
-      req.user.fcmToken,
-      `Order ${orderNumber} Placed ✅`,
-      'Your order is confirmed!',
-      { type:'order_update', orderId:order._id.toString(), status:'placed', orderNumber }
-    );
-  }
+      if (req.user?.fcmToken) {
+        await sendFCM(
+          req.user.fcmToken,
+          `Order ${orderNumber} Placed ✅`,
+          'Your order is confirmed!',
+          { type: 'order_update', orderId: order._id.toString(), status: 'placed', orderNumber }
+        ).catch(() => {});
+      }
+    } catch (fcmErr) {
+      console.warn('[FCM Background Warning]', fcmErr.message);
+    }
+  });
 
   return res.status(201).json(new APIResponse(201, order, 'Order confirmed'));
 });

@@ -3,6 +3,13 @@ import api from './api';
 
 let memoryCache = {};
 
+export const optimizeCloudinaryUrl = (url, width = 400) => {
+  if (!url || typeof url !== 'string') return url;
+  if (!url.includes('res.cloudinary.com') || !url.includes('/image/upload/')) return url;
+  if (url.includes('f_auto') || url.includes('q_auto')) return url;
+  return url.replace('/image/upload/', `/image/upload/f_auto,q_auto,w_${width}/`);
+};
+
 export const cacheProducts = (products = []) => {
   if (!Array.isArray(products)) return;
   let updated = false;

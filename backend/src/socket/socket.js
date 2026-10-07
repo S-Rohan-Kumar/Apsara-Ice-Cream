@@ -14,7 +14,14 @@ export const initSocket = (server) => {
     console.log("Socket connected:", socket.id);
 
     socket.on("join_order", (orderId) => {
-      socket.join(`order_${orderId}`);
+      let idStr = orderId;
+      if (typeof orderId === 'object' && orderId !== null) {
+        idStr = orderId.orderId || orderId._id || orderId.id;
+      }
+      if (idStr) {
+        const cleanId = idStr.toString();
+        socket.join(`order_${cleanId}`);
+      }
     });
 
     socket.on("join_admin", () => {
@@ -22,7 +29,14 @@ export const initSocket = (server) => {
     });
 
     socket.on("leave_order", (orderId) => {
-      socket.leave(`order_${orderId}`);
+      let idStr = orderId;
+      if (typeof orderId === 'object' && orderId !== null) {
+        idStr = orderId.orderId || orderId._id || orderId.id;
+      }
+      if (idStr) {
+        const cleanId = idStr.toString();
+        socket.leave(`order_${cleanId}`);
+      }
     });
 
     socket.on("rider_location", ({ orderId, lat, lng, heading }) => {
@@ -47,8 +61,13 @@ export const emitNewOrder = (order) => {
     if(io) io.to("admin_room").emit("new_order", order);
 }
 
-export const emitStatusUpdate = (orderId,status) => {
-    if(io) io.to(`order_${orderId}`).emit("status_update", status);
+export const emitStatusUpdate = (orderId, status) => {
+    if (io) {
+        const idStr = orderId?.toString?.() || orderId;
+        io.to(`order_${idStr}`).emit("status_update", status);
+        io.to(`order_${idStr}`).emit("order_status_updated", { orderId: idStr, status });
+        io.emit("order_status_updated", { orderId: idStr, status });
+    }
 }
 
 export const emitBroadcast = (broadcastData) => {
@@ -68,5 +87,10 @@ export const emitProductsUpdated = (productData) => {
 }
 
 export const emitRiderLocationUpdated = (orderId, locationData) => {
-    if (io) io.to(`order_${orderId}`).emit("rider_location_updated", locationData);
+    if (io) {
+        const idStr = orderId?.toString?.() || orderId;
+        const payload = { ...(locationData || {}), orderId: idStr };
+        io.to(`order_${idStr}`).emit("rider_location_updated", payload);
+        io.emit("rider_location_updated", payload);
+    }
 }

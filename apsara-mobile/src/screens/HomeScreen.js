@@ -61,9 +61,11 @@ export default function HomeScreen() {
   const flatListRef = useRef(null);
   const activeOrderRef = useRef(activeOrder);
   activeOrderRef.current = activeOrder;
+  const lastFetchRef = useRef(0);
 
   const fetchData = useCallback(async () => {
     try {
+      lastFetchRef.current = Date.now();
       const [catsRes, prodsRes, bcastRes, offersRes, storeRes] = await Promise.allSettled([
         api.get('/categories'),
         api.get('/products'),
@@ -201,18 +203,21 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       syncActiveOrderFromBackend();
-      fetchData();
+      if (Date.now() - lastFetchRef.current > 60000) {
+        fetchData();
+      }
     }, [syncActiveOrderFromBackend, fetchData])
   );
 
   useEffect(() => {
     if (!activeOrder?.orderId) return;
 
-    const handleStatusUpdate = (newStatus) => {
-      if (newStatus === 'delivered' || newStatus === 'cancelled') {
+    const handleStatusUpdate = (data) => {
+      const statusVal = typeof data === 'object' ? data.status : data;
+      if (statusVal === 'delivered' || statusVal === 'cancelled') {
         syncActiveOrderFromBackend();
-      } else {
-        updateActiveOrderStatus(newStatus);
+      } else if (statusVal) {
+        updateActiveOrderStatus(activeOrder.orderId, statusVal);
       }
     };
 
