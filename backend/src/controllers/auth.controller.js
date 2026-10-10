@@ -84,22 +84,60 @@ const adminLogin = asyncHandler(async (req, res) => {
     throw new APIError(400, "Username and password required");
   }
 
-  if (
-    username !== process.env.ADMIN_USERNAME ||
-    password !== process.env.ADMIN_PASSWORD
-  ) {
+  const isOwner =
+    username === process.env.ADMIN_USERNAME &&
+    password === process.env.ADMIN_PASSWORD;
+
+  const isBiller =
+    username === (process.env.BILLER_USERNAME || "apsara_biller") &&
+    password === (process.env.BILLER_PASSWORD || "biller");
+
+  if (!isOwner && !isBiller) {
     throw new APIError(401, "Invalid credentials");
   }
-  const adminUser = await User.findOne({ role: 'admin' })
-    .select("_id phone name role")
-    .lean();
 
-  if (!adminUser) throw new APIError(404, "Admin account not found");
+  let userDoc = null;
+  const targetRole = isOwner ? "owner" : "biller";
 
-  const { accessToken, payload } = await createSession(adminUser);
+  if (isOwner) {
+    userDoc = await User.findOne({ role: { $in: ["owner", "admin"] } })
+      .select("_id phone name role")
+      .lean();
+
+    if (!userDoc) {
+      userDoc = await User.create({
+        firebaseUid: "owner_system_account",
+        phone: process.env.OWNER_PHONE || "+917892547141",
+        name: "Owner",
+        role: "owner",
+      });
+    }
+  } else {
+    userDoc = await User.findOne({ role: "biller" })
+      .select("_id phone name role")
+      .lean();
+
+    if (!userDoc) {
+      userDoc = await User.create({
+        firebaseUid: "biller_system_account",
+        phone: "+910000000000",
+        name: "Biller Desk",
+        role: "biller",
+      });
+    }
+  }
+
+  const { accessToken, payload } = await createSession({
+    ...userDoc,
+    role: targetRole,
+  });
 
   return res.status(200).json(
-    new APIResponse(200, { accessToken, user: payload }, "Admin login successful")
+    new APIResponse(
+      200,
+      { accessToken, user: payload },
+      `${isOwner ? "Owner" : "Biller"} login successful`
+    )
   );
 });
 

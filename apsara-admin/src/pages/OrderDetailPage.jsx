@@ -1,4 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectUserInfo } from '../slices/authSlice';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useGetAdminOrderByIdQuery, useUpdateOrderStatusMutation } from '../slices/orderApiSlice';
@@ -24,6 +26,10 @@ export default function OrderDetailPage() {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
 
+  const userInfo = useSelector(selectUserInfo);
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  const isBiller = role === 'biller';
+
   const { data: order, isLoading } = useGetAdminOrderByIdQuery(id, { pollingInterval: 15000 });
   const [updateStatus, { isLoading: updating }] = useUpdateOrderStatusMutation();
 
@@ -42,14 +48,14 @@ export default function OrderDetailPage() {
 
   const handleCopyDeliveryText = () => {
     if (!order) return;
-    const text = getDeliveryBoyMessage(order);
+    const text = getDeliveryBoyMessage(order, isBiller);
     navigator.clipboard.writeText(text);
     showSuccess('Delivery info copied for rider!');
   };
 
   const handleWhatsAppDelivery = () => {
     if (!order) return;
-    const text = getDeliveryBoyMessage(order);
+    const text = getDeliveryBoyMessage(order, isBiller);
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     const link = document.createElement('a');
     link.href = url;
@@ -192,50 +198,97 @@ export default function OrderDetailPage() {
                         </span>
                       )}
                       <span>
-                        Qty: {item.quantity} × {currency(item.unitPrice || (item.totalPrice / item.quantity))}
+                        {isBiller ? (
+                          <strong className='text-slate-800 font-bold'>Qty: {item.quantity}</strong>
+                        ) : (
+                          `Qty: ${item.quantity} × ${currency(item.unitPrice || (item.totalPrice / item.quantity))}`
+                        )}
                       </span>
                     </div>
                   </div>
 
-                  <p className='font-bold text-slate-800 text-sm shrink-0 font-mono'>
-                    {currency(item.totalPrice)}
-                  </p>
+                  {!isBiller && item.totalPrice != null && (
+                    <p className='font-bold text-slate-800 text-sm shrink-0 font-mono'>
+                      {currency(item.totalPrice)}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
 
-            <div className='pt-6 border-t border-gray-100 bg-gray-50 -mx-6 -mb-6 p-6 rounded-b-2xl'>
-              <div className='max-w-xs ml-auto space-y-2 text-xs'>
-                <div className='flex justify-between text-gray-600'>
-                  <span>Subtotal</span>
-                  <span className='font-mono'>{currency(order.pricing?.subtotal)}</span>
-                </div>
-
-                {order.pricing?.discountAmount > 0 && (
-                  <div className='flex justify-between text-emerald-700 font-bold'>
-                    <span>Discount</span>
-                    <span className='font-mono'>-{currency(order.pricing.discountAmount)}</span>
+            {isBiller ? (
+              order.payment?.method === 'cod' ? (
+                <div className='pt-6 border-t border-gray-100 bg-amber-50/70 -mx-6 -mb-6 p-6 rounded-b-2xl'>
+                  <div className='flex items-center justify-between p-4 rounded-xl bg-white border border-amber-200 shadow-xs'>
+                    <div>
+                      <span className='inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 mb-1'>
+                        CASH ON DELIVERY
+                      </span>
+                      <p className='text-xs text-amber-900 font-bold'>
+                        Collect cash upon delivery
+                      </p>
+                    </div>
+                    <div className='text-right'>
+                      <span className='text-[10px] font-bold text-gray-500 uppercase tracking-wider block'>
+                        Amount to Collect
+                      </span>
+                      <span className='text-2xl font-black text-amber-950 font-mono'>
+                        {currency(order.pricing?.total ?? order.totalAmount ?? 0)}
+                      </span>
+                    </div>
                   </div>
-                )}
-
-                <div className='flex justify-between text-gray-600'>
-                  <span>Delivery Fee</span>
-                  <span className='font-mono'>{order.pricing?.deliveryCharge === 0 ? 'FREE' : currency(order.pricing?.deliveryCharge)}</span>
                 </div>
-
-                <div className='flex justify-between text-gray-600'>
-                  <span>Packaging Fee</span>
-                  <span className='font-mono'>{currency(order.pricing?.packagingFee ?? 5)}</span>
+              ) : (
+                <div className='pt-6 border-t border-gray-100 bg-emerald-50/50 -mx-6 -mb-6 p-6 rounded-b-2xl'>
+                  <div className='flex items-center gap-3 p-4 rounded-xl bg-white border border-emerald-200 shadow-xs'>
+                    <div className='w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-lg shrink-0'>
+                      ✓
+                    </div>
+                    <div>
+                      <p className='text-xs font-black uppercase tracking-wider text-emerald-800'>
+                        PRE-PAID ORDER (PAID ONLINE)
+                      </p>
+                      <p className='text-xs text-emerald-600 font-medium mt-0.5'>
+                        Payment settled digitally. Do not collect any cash from customer.
+                      </p>
+                    </div>
+                  </div>
                 </div>
+              )
+            ) : (
+              <div className='pt-6 border-t border-gray-100 bg-gray-50 -mx-6 -mb-6 p-6 rounded-b-2xl'>
+                <div className='max-w-xs ml-auto space-y-2 text-xs'>
+                  <div className='flex justify-between text-gray-600'>
+                    <span>Subtotal</span>
+                    <span className='font-mono'>{currency(order.pricing?.subtotal)}</span>
+                  </div>
 
-                <div className='flex justify-between items-center pt-3 border-t border-gray-200 text-sm font-bold text-slate-900'>
-                  <span>Total Amount</span>
-                  <span className='text-lg font-black text-[#1B4332] font-mono'>
-                    {currency(order.pricing?.total || order.totalAmount)}
-                  </span>
+                  {order.pricing?.discountAmount > 0 && (
+                    <div className='flex justify-between text-emerald-700 font-bold'>
+                      <span>Discount</span>
+                      <span className='font-mono'>-{currency(order.pricing.discountAmount)}</span>
+                    </div>
+                  )}
+
+                  <div className='flex justify-between text-gray-600'>
+                    <span>Delivery Fee</span>
+                    <span className='font-mono'>{order.pricing?.deliveryCharge === 0 ? 'FREE' : currency(order.pricing?.deliveryCharge)}</span>
+                  </div>
+
+                  <div className='flex justify-between text-gray-600'>
+                    <span>Packaging Fee</span>
+                    <span className='font-mono'>{currency(order.pricing?.packagingFee ?? 5)}</span>
+                  </div>
+
+                  <div className='flex justify-between items-center pt-3 border-t border-gray-200 text-sm font-bold text-slate-900'>
+                    <span>Total Amount</span>
+                    <span className='text-lg font-black text-[#1B4332] font-mono'>
+                      {currency(order.pricing?.total || order.totalAmount)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className='bg-white rounded-2xl border border-emerald-200 p-6 shadow-xs'>

@@ -11,7 +11,8 @@ import {
   useSnoozeProductMutation,
 } from '../slices/productApiSlice';
 import { useToast } from '../hooks/useToast';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectUserInfo } from '../slices/authSlice';
 import { showConfirm } from '../slices/uiSlice';
 import { registerConfirmHandler } from '../components/common/ConfirmDialog';
 import Spinner from '../components/common/Spinner';
@@ -357,6 +358,10 @@ function SnoozeModal({ product, variant, onClose }) {
 }
 
 export default function ProductsPage() {
+  const userInfo = useSelector(selectUserInfo);
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  const isBiller = role === 'biller';
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -476,19 +481,21 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setEditingId(null);
-            setForm({ name: '', category: selectedCat || '', isZeroSugar: false });
-            setImageFile(null);
-            setPreview('');
-            setShowModal(true);
-          }}
-          className='self-start md:self-auto bg-[#1B4332] hover:bg-[#163829] active:scale-95 text-white font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl shadow-xl shadow-emerald-900/15 transition-all text-xs uppercase tracking-[2px] flex items-center gap-2'
-        >
-          <span>＋</span>
-          <span>Add New Flavour</span>
-        </button>
+        {!isBiller && (
+          <button
+            onClick={() => {
+              setEditingId(null);
+              setForm({ name: '', category: selectedCat || '', isZeroSugar: false });
+              setImageFile(null);
+              setPreview('');
+              setShowModal(true);
+            }}
+            className='self-start md:self-auto bg-[#1B4332] hover:bg-[#163829] active:scale-95 text-white font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl shadow-xl shadow-emerald-900/15 transition-all text-xs uppercase tracking-[2px] flex items-center gap-2'
+          >
+            <span>＋</span>
+            <span>Add New Flavour</span>
+          </button>
+        )}
       </div>
 
       <div className='bg-white rounded-[28px] border border-green-50 shadow-sm p-4 sm:p-5 mb-8 flex flex-col md:flex-row items-center justify-between gap-4'>
@@ -544,7 +551,10 @@ export default function ProductsPage() {
               <table className='w-full min-w-[650px] text-left'>
                 <thead className='bg-[#F2F7F2]/60'>
                   <tr>
-                    {['Product Flavour', 'Category', 'Price Matrix', 'Stock Availability', 'Actions'].map((h) => (
+                    {(isBiller
+                      ? ['Product Flavour', 'Category', 'Stock Availability']
+                      : ['Product Flavour', 'Category', 'Price Matrix', 'Stock Availability', 'Actions']
+                    ).map((h) => (
                       <th
                         key={h}
                         className='px-6 py-4 text-[10px] font-black text-emerald-900/50 uppercase tracking-widest'
@@ -557,7 +567,7 @@ export default function ProductsPage() {
                 <tbody className='divide-y divide-slate-100'>
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className='text-center py-20 text-slate-400 font-bold'>
+                      <td colSpan={isBiller ? 3 : 5} className='text-center py-20 text-slate-400 font-bold'>
                         No products found matching criteria
                       </td>
                     </tr>
@@ -613,13 +623,15 @@ export default function ProductsPage() {
                             </span>
                           </td>
 
-                          <td className='px-6 py-4'>
-                            <span className='font-black text-slate-800 text-xs'>
-                              {isIcecreamProduct
-                                ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0} – ₹${p.basePrices?.shareIt || p.basePrices?.binge || p.resolvedPrices?.shareIt || p.resolvedPrices?.binge || 0}`
-                                : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
-                            </span>
-                          </td>
+                          {!isBiller && (
+                            <td className='px-6 py-4'>
+                              <span className='font-black text-slate-800 text-xs'>
+                                {isIcecreamProduct
+                                  ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0} – ₹${p.basePrices?.shareIt || p.basePrices?.binge || p.resolvedPrices?.shareIt || p.resolvedPrices?.binge || 0}`
+                                  : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
+                              </span>
+                            </td>
+                          )}
 
                           <td className='px-6 py-4'>
                             {isIcecreamProduct ? (
@@ -673,29 +685,31 @@ export default function ProductsPage() {
                             )}
                           </td>
 
-                          <td className='px-6 py-4'>
-                            <div className='flex items-center gap-2'>
-                              <button
-                                type='button'
-                                onClick={() => {
-                                  setEditingId(p._id);
-                                  setForm({ name: p.name, category: p.category?._id || '', isZeroSugar: p.isZeroSugar });
-                                  setPreview(p.imageUrl || '');
-                                  setShowModal(true);
-                                }}
-                                className='text-[11px] font-black uppercase tracking-wider text-[#1B4332] bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition'
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type='button'
-                                onClick={() => handleDelete(p._id)}
-                                className='text-[11px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition'
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
+                          {!isBiller && (
+                            <td className='px-6 py-4'>
+                              <div className='flex items-center gap-2'>
+                                <button
+                                  type='button'
+                                  onClick={() => {
+                                    setEditingId(p._id);
+                                    setForm({ name: p.name, category: p.category?._id || '', isZeroSugar: p.isZeroSugar });
+                                    setPreview(p.imageUrl || '');
+                                    setShowModal(true);
+                                  }}
+                                  className='text-[11px] font-black uppercase tracking-wider text-[#1B4332] bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition'
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type='button'
+                                  onClick={() => handleDelete(p._id)}
+                                  className='text-[11px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition'
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })
@@ -757,13 +771,15 @@ export default function ProductsPage() {
                           )}
                         </div>
                       </div>
-                      <div className='text-right shrink-0'>
-                        <p className='font-black text-slate-800 text-xs'>
-                          {isIcecreamProduct
-                            ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0}+`
-                            : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
-                        </p>
-                      </div>
+                      {!isBiller && (
+                        <div className='text-right shrink-0'>
+                          <p className='font-black text-slate-800 text-xs'>
+                            {isIcecreamProduct
+                              ? `₹${p.basePrices?.small || p.resolvedPrices?.small || 0}+`
+                              : currency(p.basePrices?.regular || p.resolvedPrices?.regular || 0)}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className='flex items-center justify-between gap-2 pt-2 border-t border-slate-100'>
@@ -803,27 +819,29 @@ export default function ProductsPage() {
                         </button>
                       </div>
 
-                      <div className='flex gap-2 ml-auto'>
-                        <button
-                          type='button'
-                          onClick={() => {
-                            setEditingId(p._id);
-                            setForm({ name: p.name, category: p.category?._id || '', isZeroSugar: p.isZeroSugar });
-                            setPreview(p.imageUrl || '');
-                            setShowModal(true);
-                          }}
-                          className='text-[10px] font-black uppercase text-[#1B4332] bg-emerald-50 px-3 py-1.5 rounded-xl'
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type='button'
-                          onClick={() => handleDelete(p._id)}
-                          className='text-[10px] font-black uppercase text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl'
-                        >
-                          Del
-                        </button>
-                      </div>
+                      {!isBiller && (
+                        <div className='flex gap-2 ml-auto'>
+                          <button
+                            type='button'
+                            onClick={() => {
+                              setEditingId(p._id);
+                              setForm({ name: p.name, category: p.category?._id || '', isZeroSugar: p.isZeroSugar });
+                              setPreview(p.imageUrl || '');
+                              setShowModal(true);
+                            }}
+                            className='text-[10px] font-black uppercase text-[#1B4332] bg-emerald-50 px-3 py-1.5 rounded-xl'
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type='button'
+                            onClick={() => handleDelete(p._id)}
+                            className='text-[10px] font-black uppercase text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl'
+                          >
+                            Del
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

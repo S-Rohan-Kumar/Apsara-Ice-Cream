@@ -1,20 +1,32 @@
-import { APIResponse } from "../utils/api-response.js";
 import { APIError } from "../utils/api-error.js";
 import { asyncHandler } from "../utils/async-handler.js"; 
 
-const adminMiddleware = asyncHandler( async (req, res , next) => {
-    const user  = req.user;
+export const adminMiddleware = asyncHandler(async (req, res, next) => {
+    const user = req.user;
 
-    if(!user){
-        throw new APIError(401 , "Unauthorized")
+    if (!user) {
+        throw new APIError(401, "Unauthorized");
     }
     
-    if(user.role !== 'admin'){
-        throw new APIError(403 , "Forbidden")
+    if (user.role !== 'admin' && user.role !== 'owner' && user.role !== 'biller') {
+        throw new APIError(403, "Forbidden - Store staff access required");
     }
 
-    next()
+    next();
+});
 
-})
+export const requireOwnerMiddleware = asyncHandler(async (req, res, next) => {
+    const user = req.user;
 
-export default adminMiddleware; 
+    if (!user) {
+        throw new APIError(401, "Unauthorized");
+    }
+    
+    if (user.role !== 'admin' && user.role !== 'owner') {
+        throw new APIError(403, "Forbidden - Store Owner access required");
+    }
+
+    next();
+});
+
+export default adminMiddleware;

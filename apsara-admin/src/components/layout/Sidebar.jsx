@@ -6,7 +6,7 @@ import { NAV_LINKS } from '../../constants';
 import { selectIsConnected } from '../../slices/socketSlice';
 import { useGetAdminOrdersQuery } from '../../slices/orderApiSlice';
 import { useGetStoreStatusQuery } from '../../slices/storeApiSlice';
-import { logOut } from '../../slices/authSlice';
+import { logOut, selectUserInfo } from '../../slices/authSlice';
 
 function Icon({ name, className = 'w-4 h-4' }) {
   if (name === '/orders') {
@@ -69,6 +69,10 @@ function Icon({ name, className = 'w-4 h-4' }) {
 }
 
 export function Sidebar({ onClose }) {
+  const userInfo = useSelector(selectUserInfo);
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  const isBiller = role === 'biller';
+
   const isConnected = useSelector(selectIsConnected);
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -86,6 +90,15 @@ export function Sidebar({ onClose }) {
     return list.filter((o) => ['placed', 'preparing', 'out_for_delivery'].includes(o.status)).length;
   }, [data]);
 
+  const visibleLinks = useMemo(() => {
+    if (isBiller) {
+      return NAV_LINKS.filter((link) =>
+        ['/orders', '/products'].includes(link.path)
+      );
+    }
+    return NAV_LINKS;
+  }, [isBiller]);
+
   return (
     <aside className='w-64 h-full shrink-0 bg-white border-r border-gray-200 flex flex-col relative select-none'>
       <div className='px-5 py-4 border-b border-gray-100 flex items-center justify-between'>
@@ -102,9 +115,16 @@ export function Sidebar({ onClose }) {
               </span>
               <span className='w-1.5 h-1.5 rounded-full bg-emerald-500'></span>
             </div>
-            <p className='text-[9px] font-bold text-gray-400 tracking-wider mt-0.5 uppercase'>
-              restaurant partner
-            </p>
+            <div className='flex items-center gap-1.5 mt-0.5'>
+              <span className='text-[9px] font-bold text-gray-400 tracking-wider uppercase'>
+                restaurant partner
+              </span>
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
+                isBiller ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {isBiller ? 'Biller' : 'Owner'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -120,7 +140,7 @@ export function Sidebar({ onClose }) {
       </div>
 
       <nav className='flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar'>
-        {NAV_LINKS.map((link) => (
+        {visibleLinks.map((link) => (
           <NavLink
             key={link.path}
             to={link.path}

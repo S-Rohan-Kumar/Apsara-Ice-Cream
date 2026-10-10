@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError('');
     try {
       const res = await adminLogin({ username, password }).unwrap();
-      dispatch(SetCredentials({ token: res.accessToken, user: res.user }));
+      dispatch(SetCredentials({ token: res.accessToken, user: res.user, role: res.user?.role }));
       navigate('/orders');
     } catch (err) {
       setError(err?.data?.message || 'Invalid credentials or unauthorized');
@@ -117,7 +117,7 @@ export default function LoginPage() {
                 type='text'
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder='admin'
+                placeholder='Username'
                 className='w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1B4332]/20 focus:border-[#1B4332] transition-all'
                 required
               />

@@ -22,6 +22,15 @@ function PublicRoute() {
   return userInfo ? <Navigate to='/orders' replace /> : <Outlet />;
 }
 
+function OwnerOnlyRoute() {
+  const userInfo = useSelector(selectUserInfo);
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  if (role === 'biller') {
+    return <Navigate to='/orders' replace />;
+  }
+  return <Outlet />;
+}
+
 export default function AppRouter() {
   return (
     <Routes>
@@ -39,10 +48,13 @@ export default function AppRouter() {
 
           <Route path='/products'   element={<ProductsPage />} />
 
-          <Route path='/categories' element={<CategoriesPage />} />
-          <Route path='/offers'     element={<OffersPage />} />
-          <Route path='/broadcast'  element={<BroadcastPage />} />
-          <Route path='/reports'    element={<ReportsPage />} />
+          {/* Owner Only Pages */}
+          <Route element={<OwnerOnlyRoute />}>
+            <Route path='/categories' element={<CategoriesPage />} />
+            <Route path='/offers'     element={<OffersPage />} />
+            <Route path='/broadcast'  element={<BroadcastPage />} />
+            <Route path='/reports'    element={<ReportsPage />} />
+          </Route>
         </Route>
       </Route>
 

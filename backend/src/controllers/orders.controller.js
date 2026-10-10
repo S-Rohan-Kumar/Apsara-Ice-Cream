@@ -246,26 +246,39 @@ const confirmOrder = asyncHandler(async (req, res) => {
   // Background non-blocking FCM notifications so customer checkout is instant
   setImmediate(async () => {
     try {
-      const adminUser = await User.findOne({ role: 'admin' });
-      if (adminUser?.fcmToken) {
-        await sendFCM(
-          adminUser.fcmToken,
-          `🍦 New Order ${orderNumber}`,
-          `${paymentMethod.toUpperCase()} order from ${req.user.phone}`,
-          { type: 'new_order', orderId: order._id.toString(), orderNumber }
-        ).catch(() => {});
+      const adminUsers = await User.find({ role: { $in: ['admin', 'owner'] } })
+        .select('fcmToken pushToken')
+        .lean();
+
+      for (const adminUser of adminUsers) {
+        const tokens = [adminUser.fcmToken, adminUser.pushToken].filter(Boolean);
+        for (const token of new Set(tokens)) {
+          sendFCM(
+            token,
+            `🍦 New Order ${orderNumber}`,
+            `${paymentMethod.toUpperCase()} order from ${req.user.phone}`,
+            { type: 'new_order', orderId: order._id.toString(), orderNumber }
+          ).catch(() => {});
+        }
       }
 
-      if (req.user?.fcmToken) {
-        await sendFCM(
-          req.user.fcmToken,
-          `Order ${orderNumber} Placed ✅`,
-          'Your order is confirmed!',
-          { type: 'order_update', orderId: order._id.toString(), status: 'placed', orderNumber }
-        ).catch(() => {});
+      const customerUser = await User.findById(req.user._id)
+        .select('fcmToken pushToken')
+        .lean();
+
+      if (customerUser) {
+        const customerTokens = [customerUser.fcmToken, customerUser.pushToken].filter(Boolean);
+        for (const token of new Set(customerTokens)) {
+          sendFCM(
+            token,
+            `Order ${orderNumber} Placed ✅`,
+            'Your order is confirmed!',
+            { type: 'order_update', orderId: order._id.toString(), status: 'placed', orderNumber }
+          ).catch(() => {});
+        }
       }
     } catch (fcmErr) {
-      console.warn('[FCM Background Warning]', fcmErr.message);
+      console.warn('[Push Background Warning]', fcmErr.message);
     }
   });
 
@@ -317,6 +330,59 @@ const cancelOrder = asyncHandler(async (req, res) => {
   return res.status(200).json(new APIResponse(200, { status:'cancelled' }, 'Order cancelled'));
 });
 
+const formatOrderForRole = (orderDoc, role) => {
+  if (!orderDoc) return null;
+  const order = orderDoc.toObject ? orderDoc.toObject() : { ...orderDoc };
+
+  if (role === 'biller') {
+    const isCod = order.payment?.method === 'cod';
+
+    if (Array.isArray(order.items)) {
+      order.items = order.items.map((item) => {
+        const itemObj = item.toObject ? item.toObject() : { ...item };
+        return {
+          ...itemObj,
+          unitPrice: null,
+          totalPrice: null,
+        };
+      });
+    }
+
+    if (isCod) {
+      const finalTotal = order.pricing?.total ?? null;
+      order.pricing = {
+        subtotal: null,
+        discountAmount: null,
+        deliveryCharge: null,
+        packagingFee: null,
+        codCharge: null,
+        total: finalTotal,
+      };
+      order.totalAmount = finalTotal;
+    } else {
+      order.pricing = {
+        subtotal: null,
+        discountAmount: null,
+        deliveryCharge: null,
+        packagingFee: null,
+        codCharge: null,
+        total: null,
+      };
+      order.totalAmount = null;
+    }
+
+    if (order.payment) {
+      order.payment = {
+        method: order.payment.method,
+        status: order.payment.status,
+        paidAt: order.payment.paidAt,
+      };
+    }
+  }
+
+  return order;
+};
+
 // ─── GET /api/orders — admin order list ──────────────────────────────────────
 const getAdminOrders = asyncHandler(async (req, res) => {
   const { status, page=1, limit=20, date } = req.query;
@@ -341,8 +407,11 @@ const getAdminOrders = asyncHandler(async (req, res) => {
     Order.countDocuments(filter),
   ]);
 
+  const userRole = req.user?.role;
+  const formattedOrders = orders.map((o) => formatOrderForRole(o, userRole));
+
   return res.status(200).json(new APIResponse(200, {
-    orders, currentPage:parseInt(page), totalPages:Math.ceil(total/parseInt(limit)), total,
+    orders: formattedOrders, currentPage:parseInt(page), totalPages:Math.ceil(total/parseInt(limit)), total,
   }, 'Admin orders fetched'));
 });
 
@@ -352,7 +421,11 @@ const getAdminOrderDetails = asyncHandler(async (req, res) => {
     .populate('customer', 'name phone')
     .populate('items.product', 'name imageUrl category');
   if (!order) throw new APIError(404, 'Order not found');
-  return res.status(200).json(new APIResponse(200, order, 'Order fetched'));
+
+  const userRole = req.user?.role;
+  const formattedOrder = formatOrderForRole(order, userRole);
+
+  return res.status(200).json(new APIResponse(200, formattedOrder, 'Order fetched'));
 });
 
 // ─── PATCH /api/orders/:id/status ────────────────────────────────────────────
@@ -360,7 +433,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
   if (!status) throw new APIError(400, 'status is required');
 
-  const order = await Order.findById(req.params.id).populate('customer', 'fcmToken');
+  const order = await Order.findById(req.params.id).populate('customer', 'fcmToken pushToken name phone');
   if (!order) throw new APIError(404, 'Order not found');
 
   if (!TRANSITIONS[order.status]?.includes(status)) {
@@ -385,10 +458,27 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   };
 
   const msg = messages[status];
-  if (msg && order.customer?.fcmToken) {
-    await sendFCM(order.customer.fcmToken, msg.title, msg.body, {
-      type:'order_update', orderId:order._id.toString(), status,
-    });
+  if (msg) {
+    let customerDoc = order.customer;
+    if (!customerDoc?.fcmToken && !customerDoc?.pushToken) {
+      const customerId = order.customer?._id || order.customer;
+      if (customerId) {
+        customerDoc = await User.findById(customerId).select('fcmToken pushToken').lean();
+      }
+    }
+
+    const tokens = new Set();
+    if (customerDoc?.fcmToken) tokens.add(customerDoc.fcmToken);
+    if (customerDoc?.pushToken) tokens.add(customerDoc.pushToken);
+
+    for (const token of tokens) {
+      sendFCM(token, msg.title, msg.body, {
+        type: 'order_update',
+        orderId: order._id.toString(),
+        status,
+        orderNumber: order.orderNumber || '',
+      }).catch((err) => console.warn('[Order Update Push Warning]', err.message));
+    }
   }
 
   return res.status(200).json(

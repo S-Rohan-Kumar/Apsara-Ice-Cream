@@ -42,6 +42,9 @@ export function Topbar({ onMenuClick }) {
     }
   };
 
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  const isBiller = role === 'biller';
+
   return (
     <header className='h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-8 shrink-0 relative z-10 gap-3'>
       <div className='flex items-center gap-3'>
@@ -111,11 +114,29 @@ export function Topbar({ onMenuClick }) {
           <span className='hidden sm:inline'>{soundEnabled ? 'Chime ON' : 'Chime Muted'}</span>
         </button>
 
-        <div className='hidden md:flex items-center gap-2 pl-2 border-l border-gray-200 text-xs font-bold text-gray-600'>
-          <span className='w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-xs'>
-            A
+        <div className='hidden md:flex items-center gap-2.5 pl-3 border-l border-gray-200 text-xs font-bold text-gray-600'>
+          <span className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs ${
+            isBiller ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
+          }`}>
+            {isBiller ? 'B' : 'O'}
           </span>
-          <span>{userInfo?.user?.phone || 'Store Admin'}</span>
+          <div className='flex flex-col text-left'>
+            <div className='flex items-center gap-1.5'>
+              <span className='font-bold text-slate-800 leading-tight'>
+                {userInfo?.user?.name || (isBiller ? 'Biller Desk' : 'Store Owner')}
+              </span>
+              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded border ${
+                isBiller ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              }`}>
+                {isBiller ? 'Biller' : 'Owner'}
+              </span>
+            </div>
+            {userInfo?.user?.phone && (
+              <span className='text-[10px] text-gray-400 font-medium leading-none mt-0.5'>
+                {userInfo.user.phone}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </header>

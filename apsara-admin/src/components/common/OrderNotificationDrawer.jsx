@@ -5,12 +5,17 @@ import {
   selectOrderAlerts,
   dismissOrderAlert,
 } from '../../slices/socketSlice';
+import { selectUserInfo } from '../../slices/authSlice';
 import { useUpdateOrderStatusMutation } from '../../slices/orderApiSlice';
 import { useToast } from '../../hooks/useToast';
 
 const currency = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 export default function OrderNotificationDrawer() {
+  const userInfo = useSelector(selectUserInfo);
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  const isBiller = role === 'biller';
+
   const alerts = useSelector(selectOrderAlerts);
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -98,9 +103,31 @@ export default function OrderNotificationDrawer() {
             </div>
 
             <div className='text-right'>
-              <span className='text-lg font-black text-slate-900 font-mono'>
-                {currency(order.pricing?.total || order.totalAmount)}
-              </span>
+              {isBiller ? (
+                order.payment?.method === 'cod' ? (
+                  <>
+                    <span className='text-[10px] uppercase font-bold text-amber-800 block'>
+                      Collect Cash
+                    </span>
+                    <span className='text-base font-black text-amber-900 font-mono'>
+                      {currency(order.pricing?.total || order.totalAmount)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className='text-[10px] uppercase font-bold text-emerald-800 block'>
+                      Pre-Paid
+                    </span>
+                    <span className='text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200'>
+                      ONLINE
+                    </span>
+                  </>
+                )
+              ) : (
+                <span className='text-lg font-black text-slate-900 font-mono'>
+                  {currency(order.pricing?.total || order.totalAmount)}
+                </span>
+              )}
               <p className='text-[9px] font-bold text-gray-400 uppercase mt-0.5'>
                 {order.items?.length || 1} {order.items?.length === 1 ? 'item' : 'items'}
               </p>

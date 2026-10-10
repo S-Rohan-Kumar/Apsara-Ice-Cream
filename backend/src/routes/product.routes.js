@@ -11,7 +11,7 @@ import {
   deleteProduct,
 } from '../controllers/product.controller.js';
 import authMiddleware  from '../middleware/auth.middleware.js';
-import adminMiddleware from '../middleware/admin.middleware.js';
+import adminMiddleware, { requireOwnerMiddleware } from '../middleware/admin.middleware.js';
 import { upload }      from '../middleware/multer.midleware.js';
 
 const router = Router();
@@ -26,13 +26,13 @@ router.get('/:id', getProductDetails);
 // IMPORTANT: /all must come before /:id so Express doesn't treat 'all' as an ID
 
 router.post('/',
-  authMiddleware, adminMiddleware,
+  authMiddleware, requireOwnerMiddleware,
   upload.single('image'),
   createProduct
 );
 
 router.patch('/:id',
-  authMiddleware, adminMiddleware,
+  authMiddleware, requireOwnerMiddleware,
   upload.single('image'),
   updateProduct
 );
@@ -55,7 +55,7 @@ router.patch('/:id/snooze',
 );
 
 router.delete('/:id',
-  authMiddleware, adminMiddleware,
+  authMiddleware, requireOwnerMiddleware,
   deleteProduct
 );
 

@@ -133,12 +133,24 @@ const getAllProducts = asyncHandler(async (req, res) => {
         expiresAt: { $gte: now },
     });
 
+    const isBiller = req.user?.role === 'biller';
+
     const data = products.map((prod) => {
         const p = prod.toObject();
-        const priceInfo = resolvePrice(prod, prod.category, activeOffers);
-        p.basePrices = priceInfo.basePrices;
-        p.resolvedPrices = priceInfo.resolvedPrices;
-        p.appliedOffer = priceInfo.appliedOffer;
+        if (isBiller) {
+            p.basePrices = null;
+            p.resolvedPrices = null;
+            p.appliedOffer = null;
+            p.priceOverride = null;
+            if (p.category) {
+                p.category.basePrice = null;
+            }
+        } else {
+            const priceInfo = resolvePrice(prod, prod.category, activeOffers);
+            p.basePrices = priceInfo.basePrices;
+            p.resolvedPrices = priceInfo.resolvedPrices;
+            p.appliedOffer = priceInfo.appliedOffer;
+        }
         p.availableVariants = getAvailableVariants(prod);
         return p;
     });

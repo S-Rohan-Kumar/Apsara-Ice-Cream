@@ -3,7 +3,7 @@ import {
 } from "../controllers/offers.controller.js";
 import { Router } from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
-import adminMiddleware from "../middleware/admin.middleware.js";
+import { requireOwnerMiddleware } from "../middleware/admin.middleware.js";
 
 const router = Router();
 
@@ -11,12 +11,12 @@ router.get("/active", getActiveOffers);
 
 router
   .route("/")
-  .get(authMiddleware, adminMiddleware, getAllOffers)
-  .post(authMiddleware, adminMiddleware, createOffer);
+  .get(authMiddleware, requireOwnerMiddleware, getAllOffers)
+  .post(authMiddleware, requireOwnerMiddleware, createOffer);
 
 router
   .route("/:id")
-  .patch(authMiddleware, adminMiddleware, updateOffer)
-  .delete(authMiddleware, adminMiddleware, deleteOffer);
+  .patch(authMiddleware, requireOwnerMiddleware, updateOffer)
+  .delete(authMiddleware, requireOwnerMiddleware, deleteOffer);
 
 export default router;

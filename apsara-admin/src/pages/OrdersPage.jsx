@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectUserInfo } from '../slices/authSlice';
 import {
   useGetAdminOrdersQuery,
   useUpdateOrderStatusMutation,
@@ -23,6 +24,10 @@ const formatTime = (iso) => {
 };
 
 export function OrdersPage() {
+  const userInfo = useSelector(selectUserInfo);
+  const role = userInfo?.user?.role || userInfo?.role || 'owner';
+  const isBiller = role === 'biller';
+
   const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState('placed');
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,13 +133,13 @@ export function OrdersPage() {
   };
 
   const handleCopyDeliveryInfo = (order) => {
-    const text = getDeliveryBoyMessage(order);
+    const text = getDeliveryBoyMessage(order, isBiller);
     navigator.clipboard.writeText(text);
     showSuccess('Delivery info copied for rider!');
   };
 
   const handleShareWhatsApp = (order) => {
-    const text = getDeliveryBoyMessage(order);
+    const text = getDeliveryBoyMessage(order, isBiller);
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     const link = document.createElement('a');
     link.href = url;
@@ -336,9 +341,11 @@ export function OrdersPage() {
                             </span>
                           )}
                         </div>
-                        <span className='font-mono font-bold text-slate-700 shrink-0'>
-                          {currency(it.totalPrice)}
-                        </span>
+                        {!isBiller && it.totalPrice != null && (
+                          <span className='font-mono font-bold text-slate-700 shrink-0'>
+                            {currency(it.totalPrice)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -346,17 +353,42 @@ export function OrdersPage() {
                   <div className='pt-3 border-t border-gray-100'>
                     <div className='flex items-center justify-between mb-3'>
                       <div className='flex items-center gap-2'>
-                        <span className='text-xs font-bold text-gray-500'>Total bill</span>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                          order.payment?.method === 'cod'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {order.payment?.method === 'cod' ? 'CASH' : 'PAID'}
-                        </span>
-                        <span className='font-black text-sm text-slate-900'>
-                          {currency(order.pricing?.total ?? order.totalAmount ?? 0)}
-                        </span>
+                        {isBiller ? (
+                          order.payment?.method === 'cod' ? (
+                            <>
+                              <span className='text-xs font-bold text-amber-900'>Collect Cash:</span>
+                              <span className='text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200'>
+                                COD
+                              </span>
+                              <span className='font-black text-sm text-amber-900 font-mono'>
+                                {currency(order.pricing?.total ?? order.totalAmount ?? 0)}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className='text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 tracking-wider'>
+                                PAID ONLINE
+                              </span>
+                              <span className='text-[10px] font-bold text-emerald-700'>
+                                • No Cash Collection
+                              </span>
+                            </>
+                          )
+                        ) : (
+                          <>
+                            <span className='text-xs font-bold text-gray-500'>Total bill</span>
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                              order.payment?.method === 'cod'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {order.payment?.method === 'cod' ? 'CASH' : 'PAID'}
+                            </span>
+                            <span className='font-black text-sm text-slate-900'>
+                              {currency(order.pricing?.total ?? order.totalAmount ?? 0)}
+                            </span>
+                          </>
+                        )}
                       </div>
 
                       <Link
