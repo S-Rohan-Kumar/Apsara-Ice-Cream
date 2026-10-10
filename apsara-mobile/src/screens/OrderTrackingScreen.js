@@ -734,7 +734,7 @@ export default function OrderTrackingScreen() {
 
               <View style={styles.summaryBreakdownRow}>
                 <Text style={styles.summaryBreakdownLabel}>Insulated Sub-Zero Packaging</Text>
-                <Text style={styles.summaryBreakdownValue}>₹{order.pricing?.packagingFee ?? 5}</Text>
+                <Text style={styles.summaryBreakdownValue}>₹{order.pricing?.packagingFee ?? 10}</Text>
               </View>
 
               <View style={styles.summaryTotalRow}>

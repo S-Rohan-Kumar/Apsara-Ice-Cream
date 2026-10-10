@@ -29,6 +29,27 @@ const INSTRUCTIONS = [
   { id: '4', icon: 'shield-checkmark-outline', label: 'Avoid calling' },
 ];
 
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const numLat1 = Number(lat1);
+  const numLon1 = Number(lon1);
+  const numLat2 = Number(lat2);
+  const numLon2 = Number(lon2);
+  if (isNaN(numLat1) || isNaN(numLon1) || isNaN(numLat2) || isNaN(numLon2)) return null;
+
+  const R = 6371;
+  const dLat = ((numLat2 - numLat1) * Math.PI) / 180;
+  const dLon = ((numLon2 - numLon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((numLat1 * Math.PI) / 180) *
+      Math.cos((numLat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(1));
+};
+
 export default function CartScreen() {
   const navigation = useNavigation();
   const {
@@ -56,6 +77,7 @@ export default function CartScreen() {
   const [liveProducts, setLiveProducts] = useState(null);
   const [isStoreOpen, setIsStoreOpen] = useState(true);
   const [storeNotice, setStoreNotice] = useState('');
+  const [storeSettings, setStoreSettings] = useState(null);
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editFlat, setEditFlat] = useState(flatNo || '');
@@ -67,6 +89,7 @@ export default function CartScreen() {
     try {
       const res = await api.get('/admin/store-status');
       if (res.data?.data) {
+        setStoreSettings(res.data.data);
         setIsStoreOpen(res.data.data.isStoreOpen ?? true);
         if (res.data.data.closedNotice) {
           setStoreNotice(res.data.data.closedNotice);
@@ -156,7 +179,42 @@ export default function CartScreen() {
     }
   }
 
-  const currentDeliveryFee = paymentMethod === 'cod' ? (subtotal > 599 || subtotal === 0 ? 0 : 20) : 0;
+  const storeLat = storeSettings?.storeLocation?.lat ?? 13.0033;
+  const storeLng = storeSettings?.storeLocation?.lng ?? 77.6834;
+  const baseDeliveryPrice = storeSettings?.baseDeliveryPrice ?? 30;
+  const freeThreshold = storeSettings?.freeDeliveryThreshold ?? 599;
+
+  const customerDistance = coords && coords.lat != null && coords.lng != null
+    ? calculateDistanceKm(storeLat, storeLng, coords.lat, coords.lng)
+    : null;
+
+  const isBeyondDeliveryRange = customerDistance != null && customerDistance > 5;
+
+  let currentDeliveryFee = 0;
+  let deliveryFeeNote = '';
+
+  if (isBeyondDeliveryRange) {
+    deliveryFeeNote = 'Location outside delivery area';
+  } else if (paymentMethod === 'online') {
+    currentDeliveryFee = 0;
+    deliveryFeeNote = '';
+  } else if (freeThreshold > 0 && subtotal >= freeThreshold) {
+    currentDeliveryFee = 0;
+    deliveryFeeNote = '';
+  } else {
+    // Tiered COD pricing
+    if (customerDistance == null || customerDistance <= 2) {
+      currentDeliveryFee = baseDeliveryPrice;
+    } else if (customerDistance <= 3) {
+      currentDeliveryFee = Math.round(baseDeliveryPrice * 1.25);
+    } else if (customerDistance <= 4) {
+      currentDeliveryFee = Math.round(baseDeliveryPrice * 1.30);
+    } else {
+      currentDeliveryFee = Math.round(baseDeliveryPrice * 1.35);
+    }
+    deliveryFeeNote = '';
+  }
+
   const currentPackagingFee = packagingFee;
   const finalAmount = Math.max(0, subtotal - offerDiscount) + currentDeliveryFee + currentPackagingFee + selectedTip;
 
@@ -246,6 +304,14 @@ export default function CartScreen() {
 
     if (!address || address.trim().length === 0) {
       setShowAddressModal(true);
+      return;
+    }
+
+    if (isBeyondDeliveryRange) {
+      Alert.alert(
+        'Delivery Not Available',
+        'Sorry, your delivery location is outside our delivery zone. We cannot accept orders for this address.'
+      );
       return;
     }
 
@@ -376,6 +442,20 @@ export default function CartScreen() {
             <Text style={styles.changeAddressText}>Change</Text>
           </TouchableOpacity>
         </View>
+
+        {isBeyondDeliveryRange && (
+          <View style={styles.outOfRangeWarningCard}>
+            <Ionicons name="warning" size={20} color="#DC2626" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.outOfRangeWarningTitle}>
+                Delivery Not Available
+              </Text>
+              <Text style={styles.outOfRangeWarningText}>
+                We do not deliver to this location. Please choose a different delivery address.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {offerDiscount > 0 && activeOfferObj ? (
           <View style={styles.appliedOfferCard}>
@@ -544,7 +624,9 @@ export default function CartScreen() {
                   <View style={styles.paymentMethodTitleRow}>
                     <Text style={[styles.codTitle, paymentMethod === 'cod' && styles.codTitleActive]}>Cash on Delivery (COD)</Text>
                   </View>
-                  <Text style={styles.codSub}>Pay cash when order arrives • ₹20 delivery (Free >₹599)</Text>
+                  <Text style={styles.codSub}>
+                    Pay cash when your order arrives
+                  </Text>
                 </View>
               </View>
               <Ionicons
@@ -567,10 +649,10 @@ export default function CartScreen() {
                   <View style={styles.paymentMethodTitleRow}>
                     <Text style={[styles.codTitle, paymentMethod === 'online' && styles.upiTitleActive]}>UPI / Online Payment</Text>
                     <View style={styles.freeDeliveryBadge}>
-                      <Text style={styles.freeDeliveryBadgeText}>FREE DELIVERY</Text>
+                      <Text style={styles.freeDeliveryBadgeText}>100% FREE DELIVERY</Text>
                     </View>
                   </View>
-                  <Text style={styles.codSub}>GPay, PhonePe, Paytm • Zero delivery charge</Text>
+                  <Text style={styles.codSub}>GPay, PhonePe, Paytm, Cards</Text>
                 </View>
               </View>
               <Ionicons
@@ -604,16 +686,25 @@ export default function CartScreen() {
           <View style={styles.billRow}>
             <View style={styles.feeInfoRow}>
               <Text style={styles.billLabel}>Delivery Fee</Text>
-              {currentDeliveryFee === 0 && (
+              {currentDeliveryFee === 0 && !isBeyondDeliveryRange && (
                 <View style={styles.freeBadge}>
                   <Text style={styles.freeBadgeText}>FREE</Text>
                 </View>
               )}
             </View>
-            <Text style={[styles.billValue, currentDeliveryFee === 0 && styles.freeValueText]}>
-              {currentDeliveryFee === 0 ? '₹0' : `₹${currentDeliveryFee}`}
+            <Text style={[styles.billValue, currentDeliveryFee === 0 && !isBeyondDeliveryRange && styles.freeValueText]}>
+              {isBeyondDeliveryRange
+                ? 'Out of Range'
+                : currentDeliveryFee === 0
+                ? '₹0'
+                : `₹${currentDeliveryFee}`}
             </Text>
           </View>
+          {deliveryFeeNote ? (
+            <Text style={[styles.deliveryFeeNoteText, isBeyondDeliveryRange && { color: '#DC2626' }]}>
+              • {deliveryFeeNote}
+            </Text>
+          ) : null}
 
           <View style={styles.billRow}>
             <Text style={styles.billLabel}>Insulated Packaging</Text>
@@ -645,16 +736,19 @@ export default function CartScreen() {
         <TouchableOpacity
           style={[
             styles.placeOrderButton,
-            (isSubmitting || hasUnavailableItems || !isStoreOpen) && styles.disabledButton,
+            (isSubmitting || hasUnavailableItems || !isStoreOpen || isBeyondDeliveryRange) && styles.disabledButton,
             !isStoreOpen && styles.storeClosedButton,
+            isBeyondDeliveryRange && styles.outOfRangeButton,
             hasUnavailableItems && styles.unavailablePlaceOrderButton,
           ]}
           onPress={
             !isStoreOpen
               ? () => Alert.alert('Store Closed', storeNotice || "We're currently closed • Kitchen is resting, reopening soon!")
+              : isBeyondDeliveryRange
+              ? () => Alert.alert('Delivery Not Available', 'Sorry, your delivery location is outside our delivery zone. Please choose a different delivery address.')
               : (hasUnavailableItems ? () => removeUnavailableItems(unavailableKeys) : handlePlaceOrder)
           }
-          disabled={isSubmitting}
+          disabled={isSubmitting || isBeyondDeliveryRange}
           activeOpacity={0.85}
         >
           {isSubmitting ? (
@@ -663,6 +757,11 @@ export default function CartScreen() {
             <>
               <Text style={styles.placeOrderText}>Store Currently Closed</Text>
               <Ionicons name="moon" size={16} color={colors.white} />
+            </>
+          ) : isBeyondDeliveryRange ? (
+            <>
+              <Text style={styles.placeOrderText}>Location Outside Delivery Zone</Text>
+              <Ionicons name="alert-circle" size={16} color={colors.white} />
             </>
           ) : hasUnavailableItems ? (
             <>
@@ -1462,5 +1561,40 @@ const styles = StyleSheet.create({
   },
   unavailablePlaceOrderButton: {
     backgroundColor: '#DC2626',
+  },
+  outOfRangeWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderRadius: radius.md,
+    padding: 12,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  outOfRangeWarningTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  outOfRangeWarningText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B91C1C',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  outOfRangeButton: {
+    backgroundColor: '#DC2626',
+    opacity: 0.85,
+  },
+  deliveryFeeNoteText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
+    marginTop: 2,
+    marginBottom: 4,
+    marginLeft: 2,
   },
 });

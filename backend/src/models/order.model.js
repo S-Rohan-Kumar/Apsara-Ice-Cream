@@ -72,7 +72,7 @@ const OrderSchema = new Schema({
     subtotal      : { type: Number, required: true },
     discountAmount: { type: Number, default: 0 },
     deliveryCharge: { type: Number, default: 0 },
-    packagingFee  : { type: Number, default: 5 },
+    packagingFee  : { type: Number, default: 10 },
     codCharge     : { type: Number, default: 0 },
     total         : { type: Number, required: true },
   },

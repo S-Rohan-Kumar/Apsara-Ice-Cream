@@ -10,6 +10,7 @@ import { APIResponse }  from '../utils/api-response.js';
 import { APIError }     from '../utils/api-error.js';
 import { sendFCM }      from '../utils/send-fcm.js';
 import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated, emitOrderCancelled } from '../socket/socket.js';
+import { calculateDistanceKm, calculateDeliveryCharge } from '../utils/delivery.js';
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
   key_id    : process.env.RAZORPAY_KEY_ID,
@@ -116,8 +117,31 @@ const initiateOrder = asyncHandler(async (req, res) => {
 
   const { subtotal, discount } = calculateOrderPricing(items, productMap, activeOffers);
 
-  const deliveryCharge = paymentMethod === 'cod' ? (subtotal > 599 ? 0 : 20) : 0;
-  const packagingFee   = subtotal > 0 ? 5 : 0;
+  const deliveryLocation = req.body.deliveryLocation || req.body.delivery?.location;
+  const storeLat = storeSettings?.storeLocation?.lat ?? 13.0033;
+  const storeLng = storeSettings?.storeLocation?.lng ?? 77.6834;
+  const baseDeliveryPrice = storeSettings?.baseDeliveryPrice ?? 30;
+  const freeDeliveryThreshold = storeSettings?.freeDeliveryThreshold ?? 599;
+
+  let distanceKm = null;
+  if (deliveryLocation && deliveryLocation.lat != null && deliveryLocation.lng != null) {
+    distanceKm = calculateDistanceKm(storeLat, storeLng, deliveryLocation.lat, deliveryLocation.lng);
+  }
+
+  const deliveryCalc = calculateDeliveryCharge({
+    distanceKm,
+    basePrice: baseDeliveryPrice,
+    paymentMethod,
+    subtotal,
+    freeDeliveryThreshold,
+  });
+
+  if (!deliveryCalc.allowed) {
+    throw new APIError(400, deliveryCalc.reason);
+  }
+
+  const deliveryCharge = deliveryCalc.charge;
+  const packagingFee   = subtotal > 0 ? 10 : 0;
   const codCharge      = 0;
   const total          = Math.max(0, subtotal - discount) + deliveryCharge + packagingFee;
 
@@ -129,7 +153,16 @@ const initiateOrder = asyncHandler(async (req, res) => {
       currency       : 'INR',
       key            : null,
       paymentMethod,
-      breakdown      : { subtotal, discountAmount: discount, deliveryCharge, packagingFee, codCharge, total },
+      breakdown      : {
+        subtotal,
+        discountAmount: discount,
+        deliveryCharge,
+        packagingFee,
+        codCharge,
+        total,
+        distanceKm,
+        isFreeDelivery: deliveryCalc.isFree,
+      },
     }, 'Order initiated'));
   }
 
@@ -187,14 +220,6 @@ const confirmOrder = asyncHandler(async (req, res) => {
 
   const { orderItems, subtotal, discount } = calculateOrderPricing(items, productMap, activeOffers);
 
-  const deliveryCharge = paymentMethod === 'cod' ? (subtotal > 599 ? 0 : 20) : 0;
-  const packagingFee   = subtotal > 0 ? 5 : 0;
-  const codCharge      = 0;
-  const total          = Math.max(0, subtotal - discount) + deliveryCharge + packagingFee;
-
-  // Generate human-readable order number — ORD-001
-  const orderNumber = await generateOrderNumber();
-
   const parsedLocation =
     deliveryLocation &&
     typeof deliveryLocation === 'object' &&
@@ -202,6 +227,36 @@ const confirmOrder = asyncHandler(async (req, res) => {
     deliveryLocation.lng !== undefined
       ? { lat: Number(deliveryLocation.lat), lng: Number(deliveryLocation.lng) }
       : null;
+
+  const storeLat = storeSettings?.storeLocation?.lat ?? 13.0033;
+  const storeLng = storeSettings?.storeLocation?.lng ?? 77.6834;
+  const baseDeliveryPrice = storeSettings?.baseDeliveryPrice ?? 30;
+  const freeDeliveryThreshold = storeSettings?.freeDeliveryThreshold ?? 599;
+
+  let distanceKm = null;
+  if (parsedLocation && parsedLocation.lat != null && parsedLocation.lng != null) {
+    distanceKm = calculateDistanceKm(storeLat, storeLng, parsedLocation.lat, parsedLocation.lng);
+  }
+
+  const deliveryCalc = calculateDeliveryCharge({
+    distanceKm,
+    basePrice: baseDeliveryPrice,
+    paymentMethod,
+    subtotal,
+    freeDeliveryThreshold,
+  });
+
+  if (!deliveryCalc.allowed) {
+    throw new APIError(400, deliveryCalc.reason);
+  }
+
+  const deliveryCharge = deliveryCalc.charge;
+  const packagingFee   = subtotal > 0 ? 10 : 0;
+  const codCharge      = 0;
+  const total          = Math.max(0, subtotal - discount) + deliveryCharge + packagingFee;
+
+  // Generate human-readable order number — ORD-001
+  const orderNumber = await generateOrderNumber();
 
   let googleMapsUrl = '';
   if (parsedLocation && parsedLocation.lat && parsedLocation.lng) {

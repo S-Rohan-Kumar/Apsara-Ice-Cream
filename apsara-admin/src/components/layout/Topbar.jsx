@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   selectIsConnected,
@@ -8,6 +9,7 @@ import { selectUserInfo } from '../../slices/authSlice';
 import { useGetStoreStatusQuery, useUpdateStoreStatusMutation } from '../../slices/storeApiSlice';
 import { useToast } from '../../hooks/useToast';
 import { playOrderChime } from '../../utils/sound';
+import DeliverySettingsModal from '../common/DeliverySettingsModal';
 
 export function Topbar({ onMenuClick }) {
   const userInfo = useSelector(selectUserInfo);
@@ -15,6 +17,7 @@ export function Topbar({ onMenuClick }) {
   const soundEnabled = useSelector(selectSoundEnabled);
   const dispatch = useDispatch();
   const { showSuccess, showError } = useToast();
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
 
   const { data: storeData } = useGetStoreStatusQuery(undefined, { pollingInterval: 10000 });
   const [updateStoreStatus, { isLoading: isUpdatingStore }] = useUpdateStoreStatusMutation();
@@ -114,6 +117,18 @@ export function Topbar({ onMenuClick }) {
           <span className='hidden sm:inline'>{soundEnabled ? 'Chime ON' : 'Chime Muted'}</span>
         </button>
 
+        {!isBiller && (
+          <button
+            onClick={() => setShowDeliveryModal(true)}
+            title='Configure Base Delivery Pricing & Range Tiers'
+            className='flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+          >
+            <span>🛵</span>
+            <span className='hidden sm:inline text-slate-600 font-semibold'>Delivery:</span>
+            <span className='font-black text-emerald-900'>₹{storeData?.baseDeliveryPrice ?? 30}</span>
+          </button>
+        )}
+
         <div className='hidden md:flex items-center gap-2.5 pl-3 border-l border-gray-200 text-xs font-bold text-gray-600'>
           <span className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs ${
             isBiller ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
@@ -139,6 +154,14 @@ export function Topbar({ onMenuClick }) {
           </div>
         </div>
       </div>
+
+      {!isBiller && (
+        <DeliverySettingsModal
+          isOpen={showDeliveryModal}
+          onClose={() => setShowDeliveryModal(false)}
+          storeData={storeData}
+        />
+      )}
     </header>
   );
 }
