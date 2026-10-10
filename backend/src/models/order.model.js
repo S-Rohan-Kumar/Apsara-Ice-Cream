@@ -80,9 +80,11 @@ const OrderSchema = new Schema({
     razorpayOrderId  : { type: String },
     razorpayPaymentId: { type: String },
     method           : { type: String, enum: ['online', 'cod'], required: true },
-    status           : { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
+    status           : { type: String, enum: ['pending', 'paid', 'failed', 'refund_pending', 'refunded'], default: 'pending' },
     paidAt           : { type: Date },
   },
+  cancellationReason: { type: String, default: '' },
+  cancelledAt       : { type: Date },
 }, { timestamps: true });
 
 // Compound indexes for query optimization

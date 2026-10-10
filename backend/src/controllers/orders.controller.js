@@ -9,7 +9,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { APIResponse }  from '../utils/api-response.js';
 import { APIError }     from '../utils/api-error.js';
 import { sendFCM }      from '../utils/send-fcm.js';
-import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated } from '../socket/socket.js';
+import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated, emitOrderCancelled } from '../socket/socket.js';
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
   key_id    : process.env.RAZORPAY_KEY_ID,
@@ -318,16 +318,68 @@ const getOrderDetails = asyncHandler(async (req, res) => {
 
 // ─── POST /api/orders/:id/cancel ─────────────────────────────────────────────
 const cancelOrder = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id);
+  const order = await Order.findById(req.params.id)
+    .populate('customer', 'name phone fcmToken pushToken');
   if (!order) throw new APIError(404, 'Order not found');
-  if (order.customer.toString() !== req.user._id.toString()) throw new APIError(403, 'Access denied');
-  if (order.status !== 'placed') throw new APIError(400, `Cannot cancel — order is ${order.status}`);
+
+  const customerId = order.customer?._id || order.customer;
+  if (customerId.toString() !== req.user._id.toString()) {
+    throw new APIError(403, 'Access denied');
+  }
+
+  if (order.status !== 'placed') {
+    throw new APIError(400, `Cannot cancel — order is already ${order.status}`);
+  }
+
+  // Enforce 1-minute cancellation window (allow 65s for network latency)
+  const orderCreatedTime = new Date(order.createdAt).getTime();
+  const elapsedSec = (Date.now() - orderCreatedTime) / 1000;
+  if (elapsedSec > 65) {
+    throw new APIError(400, 'Cancellation window expired. Orders can only be cancelled within 1 minute of booking.');
+  }
 
   order.status = 'cancelled';
+  order.cancellationReason = req.body?.reason || 'Cancelled by customer within 1 minute';
+  order.cancelledAt = new Date();
+  if (order.payment?.status === 'paid') {
+    order.payment.status = 'refund_pending';
+  }
   await order.save();
-  emitStatusUpdate(order._id.toString(), 'cancelled');
 
-  return res.status(200).json(new APIResponse(200, { status:'cancelled' }, 'Order cancelled'));
+  // Socket broadcast to admin store side and tracking screen
+  emitStatusUpdate(order._id.toString(), 'cancelled');
+  emitOrderCancelled(order);
+
+  // Send push notification to Admin & Owner
+  setImmediate(async () => {
+    try {
+      const adminUsers = await User.find({ role: { $in: ['admin', 'owner'] } })
+        .select('fcmToken pushToken')
+        .lean();
+
+      const customerPhone = order.customer?.phone || req.user.phone || '';
+      for (const adminUser of adminUsers) {
+        const tokens = [adminUser.fcmToken, adminUser.pushToken].filter(Boolean);
+        for (const token of new Set(tokens)) {
+          sendFCM(
+            token,
+            `⚠️ Order Cancelled: ${order.orderNumber}`,
+            `Customer (${customerPhone}) cancelled order within 1 minute.`,
+            {
+              type: 'order_cancelled',
+              orderId: order._id.toString(),
+              orderNumber: order.orderNumber,
+              status: 'cancelled',
+            }
+          ).catch(() => {});
+        }
+      }
+    } catch (fcmErr) {
+      console.warn('[Push Cancellation Warning]', fcmErr.message);
+    }
+  });
+
+  return res.status(200).json(new APIResponse(200, { status: 'cancelled', order }, 'Order cancelled successfully'));
 });
 
 const formatOrderForRole = (orderDoc, role) => {

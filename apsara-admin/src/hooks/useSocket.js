@@ -7,6 +7,8 @@ import {
   setConnected,
   setDisconnected,
   addOrderAlert,
+  dismissOrderAlert,
+  addCancellationAlert,
   selectSoundEnabled,
 } from '../slices/socketSlice.js';
 import { apiSlice } from '../slices/apiSlice.js';
@@ -80,8 +82,23 @@ export function useSocket() {
       dispatch(apiSlice.util.invalidateTags(['Order']));
     };
 
+    const handleOrderCancelled = (cancelledData) => {
+      if (soundEnabledRef.current) {
+        playOrderChime();
+      }
+      if (cancelledData) {
+        const cId = (cancelledData._id || cancelledData.orderId)?.toString?.();
+        if (cId) {
+          dispatch(dismissOrderAlert(cId));
+        }
+        dispatch(addCancellationAlert(cancelledData));
+      }
+      dispatch(apiSlice.util.invalidateTags(['Order']));
+    };
+
     const STATUS_EVENTS = [
       'order_status_update',
+      'order_status_updated',
       'orderStatusUpdate',
       'status_update',
       'order_delivered',
@@ -92,6 +109,16 @@ export function useSocket() {
       socket.on(evt, handleStatusUpdate);
     });
 
+    const CANCEL_EVENTS = [
+      'order_cancelled',
+      'orderCancelled',
+      'order_cancel',
+    ];
+
+    CANCEL_EVENTS.forEach((evt) => {
+      socket.on(evt, handleOrderCancelled);
+    });
+
     socket.on('disconnect', () => dispatch(setDisconnected()));
 
     return () => {
@@ -100,6 +127,9 @@ export function useSocket() {
       });
       STATUS_EVENTS.forEach((evt) => {
         socket.off(evt, handleStatusUpdate);
+      });
+      CANCEL_EVENTS.forEach((evt) => {
+        socket.off(evt, handleOrderCancelled);
       });
       socket.disconnect();
       dispatch(setDisconnected());

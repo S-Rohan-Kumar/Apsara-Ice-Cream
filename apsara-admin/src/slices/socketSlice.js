@@ -11,6 +11,7 @@ const socketSlice = createSlice({
     newOrderCount: 0,
     soundEnabled: initialSound,
     orderAlerts: [],
+    cancellationAlerts: [],
   },
   reducers: {
     setConnected: (state) => {
@@ -41,8 +42,23 @@ const socketSlice = createSlice({
     dismissOrderAlert: (state, action) => {
       state.orderAlerts = state.orderAlerts.filter((o) => o._id !== action.payload);
     },
+    addCancellationAlert: (state, action) => {
+      if (!action.payload) return;
+      const alert = action.payload;
+      const alertId = (alert._id || alert.orderId)?.toString?.();
+      // Remove from new order alerts if it was pending
+      state.orderAlerts = state.orderAlerts.filter((o) => (o._id || o.orderId)?.toString?.() !== alertId);
+      const filtered = state.cancellationAlerts.filter((o) => (o._id || o.orderId)?.toString?.() !== alertId);
+      state.cancellationAlerts = [alert, ...filtered].slice(0, 3);
+    },
+    dismissCancellationAlert: (state, action) => {
+      state.cancellationAlerts = state.cancellationAlerts.filter(
+        (o) => (o._id || o.orderId)?.toString?.() !== action.payload?.toString?.()
+      );
+    },
     clearAllAlerts: (state) => {
       state.orderAlerts = [];
+      state.cancellationAlerts = [];
     },
   },
 });
@@ -55,6 +71,8 @@ export const {
   toggleSound,
   addOrderAlert,
   dismissOrderAlert,
+  addCancellationAlert,
+  dismissCancellationAlert,
   clearAllAlerts,
 } = socketSlice.actions;
 
@@ -64,3 +82,4 @@ export const selectIsConnected = (s) => s.socket.isConnected;
 export const selectNewOrderCount = (s) => s.socket.newOrderCount;
 export const selectSoundEnabled = (s) => s.socket.soundEnabled;
 export const selectOrderAlerts = (s) => s.socket.orderAlerts;
+export const selectCancellationAlerts = (s) => s.socket.cancellationAlerts || [];

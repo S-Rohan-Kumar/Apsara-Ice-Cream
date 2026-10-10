@@ -10,6 +10,7 @@ import {
   Animated,
   PanResponder,
   Image,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -91,18 +92,98 @@ export default function OrderTrackingScreen() {
     initialOrder?.delivery?.location || null
   );
 
+  const getRemainingCancelSeconds = (createdAt) => {
+    if (!createdAt) return 0;
+    const created = new Date(createdAt).getTime();
+    if (isNaN(created)) return 0;
+    const diff = Math.floor((60 * 1000 - (Date.now() - created)) / 1000);
+    return Math.max(0, diff);
+  };
+
+  const [cancelRemainingSec, setCancelRemainingSec] = useState(() => {
+    return getRemainingCancelSeconds(initialOrder?.createdAt);
+  });
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const canCancel = cancelRemainingSec > 0 && currentStatus === 'placed';
+  const effectiveCollapsed = canCancel ? 225 : SNAP_COLLAPSED;
+
   const mapRef = useRef(null);
-  const sheetHeight = useRef(new Animated.Value(SNAP_COLLAPSED)).current;
+  const sheetHeight = useRef(new Animated.Value(effectiveCollapsed)).current;
   const isExpandedRef = useRef(false);
 
   useEffect(() => {
     isExpandedRef.current = isExpanded;
   }, [isExpanded]);
 
+  useEffect(() => {
+    if (!isExpanded) {
+      Animated.timing(sheetHeight, {
+        toValue: effectiveCollapsed,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [effectiveCollapsed, isExpanded]);
+
+  useEffect(() => {
+    const orderCreatedAt = order?.createdAt || initialOrder?.createdAt;
+    if (!orderCreatedAt || currentStatus !== 'placed') {
+      setCancelRemainingSec(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const rem = getRemainingCancelSeconds(orderCreatedAt);
+      setCancelRemainingSec(rem);
+      if (rem <= 0 && timer) {
+        clearInterval(timer);
+      }
+    };
+
+    updateRemaining();
+    const timer = setInterval(updateRemaining, 1000);
+    return () => clearInterval(timer);
+  }, [order?.createdAt, initialOrder?.createdAt, currentStatus]);
+
+  const handleCancelOrder = () => {
+    if (isCancelling) return;
+    Alert.alert(
+      'Cancel Order?',
+      'Are you sure you want to cancel this order? This action cannot be undone.',
+      [
+        { text: 'Keep Order', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Order',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsCancelling(true);
+              await api.post(`/orders/${resolvedOrderId}/cancel`, {
+                reason: 'Cancelled by customer within 1 minute',
+              });
+              setCurrentStatus('cancelled');
+              setOrder((prev) => (prev ? { ...prev, status: 'cancelled', orderStatus: 'cancelled' } : prev));
+              if (updateActiveOrderStatus) {
+                updateActiveOrderStatus(resolvedOrderId, 'cancelled');
+              }
+              Alert.alert('Order Cancelled', 'Your order has been cancelled.');
+            } catch (err) {
+              const msg = err.response?.data?.message || err.message || 'Could not cancel order.';
+              Alert.alert('Cancellation Failed', msg);
+            } finally {
+              setIsCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const snapTo = (toExpanded) => {
     setIsExpanded(toExpanded);
     Animated.spring(sheetHeight, {
-      toValue: toExpanded ? SNAP_EXPANDED : SNAP_COLLAPSED,
+      toValue: toExpanded ? SNAP_EXPANDED : effectiveCollapsed,
       friction: 8,
       tension: 48,
       useNativeDriver: false,
@@ -356,6 +437,34 @@ export default function OrderTrackingScreen() {
         </View>
       </View>
 
+      {canCancel && (
+        <View style={[styles.cancelBannerContainer, { top: insets.top + 60 }]} pointerEvents="box-none">
+          <View style={styles.cancelBanner}>
+            <View style={styles.cancelBannerLeft}>
+              <View style={styles.cancelTimerCircle}>
+                <Text style={styles.cancelTimerText}>{cancelRemainingSec}s</Text>
+              </View>
+              <View style={{ marginLeft: 8 }}>
+                <Text style={styles.cancelBannerTitle}>Order placed just now</Text>
+                <Text style={styles.cancelBannerSubtitle}>
+                  Can cancel within 1 minute
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.cancelBannerBtn}
+              onPress={handleCancelOrder}
+              disabled={isCancelling}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cancelBannerBtnText}>
+                {isCancelling ? 'Cancelling...' : 'Cancel Order'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <Animated.View
         style={[
           styles.floatingRecenterBtnWrap,
@@ -413,33 +522,63 @@ export default function OrderTrackingScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.riderPartnerCard}>
-            <View style={styles.riderAvatarContainer}>
-              <Ionicons name="bicycle" size={20} color={colors.primary} />
-              <View style={styles.avatarVerifiedBadge}>
-                <Ionicons name="checkmark" size={9} color={colors.white} />
+          {canCancel && (
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={handleCancelOrder}
+              disabled={isCancelling}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close-circle" size={16} color="#DC2626" />
+              <Text style={styles.sheetCancelBtnText}>
+                {isCancelling ? 'Cancelling...' : `Cancel Order • ${cancelRemainingSec}s left`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {currentStatus === 'cancelled' ? (
+            <View style={styles.cancelledStatusCard}>
+              <View style={styles.cancelledIconWrap}>
+                <Ionicons name="close-circle" size={24} color="#DC2626" />
+              </View>
+              <View style={styles.cancelledTextWrap}>
+                <Text style={styles.cancelledStatusTitle}>Order Cancelled</Text>
+                <Text style={styles.cancelledStatusSubtitle}>
+                  {order?.payment?.method === 'online'
+                    ? 'Refund will be processed to your original payment method.'
+                    : 'Order was cancelled within 1 minute. No payment charged.'}
+                </Text>
               </View>
             </View>
-
-            <View style={styles.riderDetails}>
-              <View style={styles.riderNameRow}>
-                <Text style={styles.riderName}>Apsara Express Partner</Text>
-                <View style={styles.ratingBadge}>
-                  <Ionicons name="star" size={10} color="#F59E0B" />
-                  <Text style={styles.ratingText}>4.9</Text>
+          ) : (
+            <View style={styles.riderPartnerCard}>
+              <View style={styles.riderAvatarContainer}>
+                <Ionicons name="bicycle" size={20} color={colors.primary} />
+                <View style={styles.avatarVerifiedBadge}>
+                  <Ionicons name="checkmark" size={9} color={colors.white} />
                 </View>
               </View>
-              <Text style={styles.riderSubtext}>Electric Scooter • -18°C Insulated Pack</Text>
-            </View>
 
-            <TouchableOpacity
-              onPress={handleCallPartner}
-              style={styles.callPartnerBtn}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="call" size={16} color={colors.white} />
-            </TouchableOpacity>
-          </View>
+              <View style={styles.riderDetails}>
+                <View style={styles.riderNameRow}>
+                  <Text style={styles.riderName}>Apsara Express Partner</Text>
+                  <View style={styles.ratingBadge}>
+                    <Ionicons name="star" size={10} color="#F59E0B" />
+                    <Text style={styles.ratingText}>4.9</Text>
+                  </View>
+                </View>
+                <Text style={styles.riderSubtext}>Electric Scooter • -18°C Insulated Pack</Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleCallPartner}
+                style={styles.callPartnerBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="call" size={16} color={colors.white} />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {!isExpanded && (
             <TouchableOpacity
@@ -607,6 +746,20 @@ export default function OrderTrackingScreen() {
                 </Text>
               </View>
             </View>
+          )}
+
+          {canCancel && (
+            <TouchableOpacity
+              style={styles.scrollCancelBtn}
+              onPress={handleCancelOrder}
+              disabled={isCancelling}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="close-circle" size={18} color="#DC2626" />
+              <Text style={styles.scrollCancelBtnText}>
+                {isCancelling ? 'Cancelling Order...' : `Cancel Order (${cancelRemainingSec}s remaining)`}
+              </Text>
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity
@@ -1146,5 +1299,133 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSize.sm,
     fontWeight: '800',
+  },
+  cancelBannerContainer: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    zIndex: 25,
+  },
+  cancelBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  cancelBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cancelTimerCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelTimerText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#DC2626',
+  },
+  cancelBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  cancelBannerSubtitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 1,
+  },
+  cancelBannerBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.md,
+    marginLeft: 8,
+  },
+  cancelBannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  sheetCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  sheetCancelBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  scrollCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    paddingVertical: 13,
+    marginBottom: spacing.sm,
+  },
+  scrollCancelBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  cancelledStatusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    padding: 12,
+    marginBottom: 8,
+  },
+  cancelledIconWrap: {
+    marginRight: 10,
+  },
+  cancelledTextWrap: {
+    flex: 1,
+  },
+  cancelledStatusTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#991B1B',
+  },
+  cancelledStatusSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B91C1C',
+    marginTop: 2,
+    lineHeight: 15,
   },
 });

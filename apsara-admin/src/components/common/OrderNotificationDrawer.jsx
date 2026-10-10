@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   selectOrderAlerts,
   dismissOrderAlert,
+  selectCancellationAlerts,
+  dismissCancellationAlert,
 } from '../../slices/socketSlice';
 import { selectUserInfo } from '../../slices/authSlice';
 import { useUpdateOrderStatusMutation } from '../../slices/orderApiSlice';
@@ -17,6 +19,7 @@ export default function OrderNotificationDrawer() {
   const isBiller = role === 'biller';
 
   const alerts = useSelector(selectOrderAlerts);
+  const cancellationAlerts = useSelector(selectCancellationAlerts);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [updateOrderStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation();
@@ -31,7 +34,19 @@ export default function OrderNotificationDrawer() {
     return () => clearTimeout(timer);
   }, [alerts, dispatch]);
 
-  if (alerts.length === 0) return null;
+  useEffect(() => {
+    if (!cancellationAlerts || cancellationAlerts.length === 0) return;
+    const latest = cancellationAlerts[0];
+    const alertId = latest._id || latest.orderId;
+    const timer = setTimeout(() => {
+      dispatch(dismissCancellationAlert(alertId));
+    }, 18000);
+    return () => clearTimeout(timer);
+  }, [cancellationAlerts, dispatch]);
+
+  if ((!alerts || alerts.length === 0) && (!cancellationAlerts || cancellationAlerts.length === 0)) {
+    return null;
+  }
 
   const handleStartPreparing = async (orderId, orderNumber) => {
     try {
@@ -50,6 +65,71 @@ export default function OrderNotificationDrawer() {
 
   return (
     <div className='fixed top-4 sm:top-6 right-4 sm:right-6 z-[9999] flex flex-col gap-3 pointer-events-auto max-w-[94vw] sm:max-w-[400px] w-full'>
+      {cancellationAlerts && cancellationAlerts.map((cancelOrder) => {
+        const orderId = cancelOrder._id || cancelOrder.orderId;
+        const orderNum = cancelOrder.orderNumber || `#${orderId.slice(-4).toUpperCase()}`;
+        return (
+          <div
+            key={`cancel_${orderId}`}
+            className='bg-white border-2 border-rose-500 rounded-2xl p-5 shadow-2xl text-slate-800 animate-in slide-in-from-right duration-300 relative'
+          >
+            <div className='flex items-center justify-between mb-3'>
+              <div className='flex items-center gap-2'>
+                <span className='relative flex h-2.5 w-2.5'>
+                  <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75'></span>
+                  <span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600'></span>
+                </span>
+                <span className='text-[10px] font-black uppercase tracking-wider text-rose-700'>
+                  ⚠️ Order Cancelled by Customer
+                </span>
+              </div>
+
+              <button
+                onClick={() => dispatch(dismissCancellationAlert(orderId))}
+                className='text-gray-400 hover:text-gray-700 p-1 rounded-lg'
+                aria-label='Dismiss notification'
+              >
+                <svg width='16' height='16' viewBox='0 0 20 20' fill='currentColor'>
+                  <path fillRule='evenodd' d='M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z' clipRule='evenodd' />
+                </svg>
+              </button>
+            </div>
+
+            <div className='mb-3'>
+              <div className='flex items-center gap-2 mb-1'>
+                <span className='font-mono font-black text-base text-rose-800'>
+                  {orderNum}
+                </span>
+                <span className='text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-800'>
+                  Cancelled (&lt; 1 min)
+                </span>
+              </div>
+              <p className='text-xs font-semibold text-gray-600'>
+                {cancelOrder.cancellationReason || 'Customer cancelled this order within 1 minute of booking.'}
+              </p>
+            </div>
+
+            <div className='flex items-center gap-2'>
+              <button
+                onClick={() => {
+                  dispatch(dismissCancellationAlert(orderId));
+                  navigate(`/orders`);
+                }}
+                className='flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-3 rounded-xl text-xs uppercase tracking-wider transition-all text-center'
+              >
+                View in Orders
+              </button>
+              <button
+                onClick={() => dispatch(dismissCancellationAlert(orderId))}
+                className='bg-gray-100 hover:bg-gray-200 text-slate-700 font-bold py-2 px-3 rounded-xl text-xs uppercase tracking-wider transition-all'
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
       {alerts.map((order) => (
         <div
           key={order._id}

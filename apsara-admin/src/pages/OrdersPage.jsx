@@ -83,6 +83,8 @@ export function OrdersPage() {
       list = list.filter((o) => o.status === 'out_for_delivery');
     } else if (activeTab === 'delivered') {
       list = list.filter((o) => o.status === 'delivered');
+    } else if (activeTab === 'cancelled') {
+      list = list.filter((o) => o.status === 'cancelled');
     }
 
     if (searchQuery.trim()) {
@@ -111,7 +113,7 @@ export function OrdersPage() {
   }, [rawOrders, activeTab, searchQuery]);
 
   const counts = useMemo(() => {
-    const res = { placed: 0, preparing: 0, out_for_delivery: 0, delivered: 0, all: rawOrders.length };
+    const res = { placed: 0, preparing: 0, out_for_delivery: 0, delivered: 0, cancelled: 0, all: rawOrders.length };
     rawOrders.forEach((o) => {
       if (res[o.status] !== undefined) {
         res[o.status] += 1;
@@ -201,6 +203,7 @@ export function OrdersPage() {
           { id: 'preparing', label: 'Preparing', count: counts.preparing, badgeCls: 'bg-amber-100 text-amber-800' },
           { id: 'out_for_delivery', label: 'Rollout', count: counts.out_for_delivery, badgeCls: 'bg-blue-100 text-blue-800' },
           { id: 'delivered', label: 'Delivered', count: counts.delivered, badgeCls: 'bg-emerald-100 text-emerald-800' },
+          { id: 'cancelled', label: 'Cancelled', count: counts.cancelled, badgeCls: 'bg-rose-100 text-rose-800' },
           { id: 'all', label: 'All Orders', count: counts.all, badgeCls: 'bg-gray-100 text-gray-700' },
         ].map((tab) => (
           <button
@@ -311,13 +314,17 @@ export function OrdersPage() {
                     </div>
 
                     <div className='flex items-center justify-between'>
-                      <div className='flex items-center gap-1.5 text-emerald-700 font-bold'>
-                        <svg className='w-3 h-3 text-emerald-600' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'>
+                      <div className={`flex items-center gap-1.5 font-bold ${order.status === 'cancelled' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                        <svg className={`w-3 h-3 ${order.status === 'cancelled' ? 'text-rose-600' : 'text-emerald-600'}`} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'>
                           <polyline points='20 6 9 17 4 12'></polyline>
                         </svg>
                         <span>Status</span>
                       </div>
-                      <span className='font-bold uppercase text-[9px] text-[#1B4332]'>
+                      <span className={`font-bold uppercase text-[9px] px-2 py-0.5 rounded-full ${
+                        order.status === 'cancelled'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-emerald-50 text-[#1B4332]'
+                      }`}>
                         {order.status.replace(/_/g, ' ')}
                       </span>
                     </div>
@@ -423,8 +430,14 @@ export function OrdersPage() {
                         )}
                       </button>
                     ) : (
-                      <div className='w-full py-2 text-center text-xs font-bold text-emerald-800 bg-emerald-50 rounded-xl border border-emerald-200'>
-                        {order.status === 'delivered' ? 'Completed & Delivered' : 'Cancelled'}
+                      <div className={`w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border ${
+                        order.status === 'delivered'
+                          ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                          : 'text-rose-800 bg-rose-50 border-rose-200'
+                      }`}>
+                        {order.status === 'delivered'
+                          ? 'Completed & Delivered'
+                          : (order.cancellationReason || 'Cancelled by Customer (< 1 min)')}
                       </div>
                     )}
                   </div>

@@ -61,6 +61,29 @@ export const emitNewOrder = (order) => {
     if(io) io.to("admin_room").emit("new_order", order);
 }
 
+export const emitOrderCancelled = (order) => {
+    if (io) {
+        const idStr = order._id?.toString?.() || order._id || '';
+        const payload = {
+            orderId: idStr,
+            _id: idStr,
+            orderNumber: order.orderNumber,
+            status: 'cancelled',
+            customer: order.customer,
+            cancellationReason: order.cancellationReason || 'Cancelled by customer within 1 minute',
+            cancelledAt: order.cancelledAt || new Date(),
+        };
+        io.to("admin_room").emit("order_cancelled", payload);
+        io.to("admin_room").emit("order_status_updated", { orderId: idStr, status: 'cancelled' });
+        if (idStr) {
+            io.to(`order_${idStr}`).emit("status_update", 'cancelled');
+            io.to(`order_${idStr}`).emit("order_status_updated", { orderId: idStr, status: 'cancelled' });
+        }
+        io.emit("order_cancelled", payload);
+        io.emit("order_status_updated", { orderId: idStr, status: 'cancelled' });
+    }
+}
+
 export const emitStatusUpdate = (orderId, status) => {
     if (io) {
         const idStr = orderId?.toString?.() || orderId;

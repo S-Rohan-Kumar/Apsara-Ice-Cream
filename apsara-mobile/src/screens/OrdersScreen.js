@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -150,6 +151,38 @@ export default function OrdersScreen() {
     navigation.navigate('Cart');
   };
 
+  const handleCancelOrder = (order) => {
+    Alert.alert(
+      'Cancel Order?',
+      'Are you sure you want to cancel this order? This action cannot be undone.',
+      [
+        { text: 'Keep Order', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Order',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const orderId = (order._id || order.orderId)?.toString?.();
+              await api.post(`/orders/${orderId}/cancel`, {
+                reason: 'Cancelled by customer within 1 minute',
+              });
+              setOrders((prev) =>
+                prev.map((o) => {
+                  const oId = (o._id || o.orderId)?.toString?.();
+                  return oId === orderId ? { ...o, status: 'cancelled', orderStatus: 'cancelled' } : o;
+                })
+              );
+              Alert.alert('Order Cancelled', 'Your order has been cancelled.');
+            } catch (err) {
+              const msg = err.response?.data?.message || err.message || 'Could not cancel order.';
+              Alert.alert('Cancellation Failed', msg);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (!isAuthenticated) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -254,11 +287,23 @@ export default function OrdersScreen() {
                   <Text style={styles.orderTotal}>Total: ₹{item.pricing?.total ?? item.totalAmount ?? 0}</Text>
 
                   <View style={styles.actionButtons}>
+                    {item.status === 'placed' && (Date.now() - new Date(item.createdAt).getTime()) < 65000 && (
+                      <TouchableOpacity
+                        style={styles.cancelOrderBtn}
+                        onPress={() => handleCancelOrder(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="close-circle" size={12} color="#DC2626" />
+                        <Text style={styles.cancelOrderBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                    )}
+
                     {isActive && (
                       <TouchableOpacity
                         style={styles.trackBtn}
                         onPress={() =>
                           navigation.navigate('OrderTracking', {
+                            order: item,
                             orderId: item._id,
                             orderNumber: item.orderNumber,
                           })
@@ -452,6 +497,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: colors.white,
+  },
+  cancelOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+  },
+  cancelOrderBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#DC2626',
   },
   centered: {
     flex: 1,
