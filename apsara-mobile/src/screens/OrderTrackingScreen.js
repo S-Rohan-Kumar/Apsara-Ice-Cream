@@ -106,7 +106,7 @@ export default function OrderTrackingScreen() {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const canCancel = cancelRemainingSec > 0 && currentStatus === 'placed';
-  const effectiveCollapsed = canCancel ? 225 : SNAP_COLLAPSED;
+  const effectiveCollapsed = SNAP_COLLAPSED;
 
   const mapRef = useRef(null);
   const sheetHeight = useRef(new Animated.Value(effectiveCollapsed)).current;
@@ -437,34 +437,6 @@ export default function OrderTrackingScreen() {
         </View>
       </View>
 
-      {canCancel && (
-        <View style={[styles.cancelBannerContainer, { top: insets.top + 60 }]} pointerEvents="box-none">
-          <View style={styles.cancelBanner}>
-            <View style={styles.cancelBannerLeft}>
-              <View style={styles.cancelTimerCircle}>
-                <Text style={styles.cancelTimerText}>{cancelRemainingSec}s</Text>
-              </View>
-              <View style={{ marginLeft: 8 }}>
-                <Text style={styles.cancelBannerTitle}>Order placed just now</Text>
-                <Text style={styles.cancelBannerSubtitle}>
-                  Can cancel within 1 minute
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.cancelBannerBtn}
-              onPress={handleCancelOrder}
-              disabled={isCancelling}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.cancelBannerBtnText}>
-                {isCancelling ? 'Cancelling...' : 'Cancel Order'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
       <Animated.View
         style={[
           styles.floatingRecenterBtnWrap,
@@ -521,20 +493,6 @@ export default function OrderTrackingScreen() {
               />
             </TouchableOpacity>
           </View>
-
-          {canCancel && (
-            <TouchableOpacity
-              style={styles.sheetCancelBtn}
-              onPress={handleCancelOrder}
-              disabled={isCancelling}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="close-circle" size={16} color="#DC2626" />
-              <Text style={styles.sheetCancelBtnText}>
-                {isCancelling ? 'Cancelling...' : `Cancel Order • ${cancelRemainingSec}s left`}
-              </Text>
-            </TouchableOpacity>
-          )}
 
           {currentStatus === 'cancelled' ? (
             <View style={styles.cancelledStatusCard}>
