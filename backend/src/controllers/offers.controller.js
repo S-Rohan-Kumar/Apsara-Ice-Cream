@@ -1,8 +1,12 @@
 import Offer from '../models/offer.model.js';
+import User from '../models/user.model.js';
+import Broadcast from '../models/broadcast.model.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { APIResponse } from '../utils/api-response.js';
 import { APIError } from '../utils/api-error.js';
-import { emitOffersUpdated } from '../socket/socket.js';
+import { emitOffersUpdated, emitBroadcast } from '../socket/socket.js';
+import { uploadOnCloudinary } from '../utils/cloudinary.js';
+import { sendExpoPush, sendFCMPush } from '../utils/send-push.js';
 
 // GET /api/offers/active
 const getActiveOffers = asyncHandler(async (req, res) => {
@@ -42,18 +46,91 @@ const createOffer = asyncHandler(async (req, res) => {
     throw new APIError(400, 'discountPercent must be between 1 and 100');
   }
 
+  let imageUrl = req.body.imageUrl || '';
+  if (req.file) {
+    const uploaded = await uploadOnCloudinary(req.file.path);
+    if (uploaded) imageUrl = uploaded.secure_url;
+  }
+
   const offer = await Offer.create({
-    title,
-    description,
+    title: title.trim(),
+    description: description ? description.trim() : '',
     category      : category || null,
-    discountPercent,
-    minOrderAmount : minOrderAmount || 0,
+    discountPercent: Number(discountPercent),
+    minOrderAmount : Number(minOrderAmount) || 0,
+    imageUrl,
     startsAt       : new Date(startsAt),
     expiresAt      : new Date(expiresAt),
     createdBy      : req.user._id,
   });
 
   emitOffersUpdated({ action: 'created', offer });
+
+  // Optional Rich Push Notification to customers with offer image banner
+  const shouldSendPush = req.body.sendPush === 'true' || req.body.sendPush === true;
+  if (shouldSendPush) {
+    try {
+      const pushTitle = `🎉 Special Offer: ${offer.title} (${offer.discountPercent}% OFF)`;
+      const pushBody = offer.description || `Get ${offer.discountPercent}% OFF! Limited time store offer.`;
+
+      const broadcast = await Broadcast.create({
+        title: pushTitle,
+        body: pushBody,
+        type: 'promotional',
+        imageUrl: offer.imageUrl || '',
+        sentBy: req.user?._id || null,
+      });
+
+      emitBroadcast({
+        _id: broadcast._id,
+        title: broadcast.title,
+        body: broadcast.body,
+        type: broadcast.type,
+        imageUrl: broadcast.imageUrl,
+        createdAt: broadcast.createdAt,
+        offerId: offer._id.toString(),
+      });
+
+      const users = await User.find({
+        $or: [{ pushToken: { $ne: null } }, { fcmToken: { $ne: null } }],
+      }).select('pushToken fcmToken').lean();
+
+      const expoMessages = [];
+      const fcmTokens = [];
+
+      users.forEach((u) => {
+        const token = u.pushToken || u.fcmToken;
+        if (!token) return;
+        if (token.startsWith('ExponentPushToken') || token.startsWith('ExpoPushToken')) {
+          expoMessages.push({
+            to: token,
+            sound: 'default',
+            title: pushTitle,
+            body: pushBody,
+            data: {
+              broadcastId: broadcast._id.toString(),
+              type: 'promotional',
+              imageUrl: offer.imageUrl || '',
+              image: offer.imageUrl || '',
+              offerId: offer._id.toString(),
+            },
+          });
+        } else {
+          fcmTokens.push(token);
+        }
+      });
+
+      if (expoMessages.length > 0) {
+        sendExpoPush(expoMessages).catch(() => {});
+      }
+      if (fcmTokens.length > 0) {
+        sendFCMPush(fcmTokens, pushTitle, pushBody, { offerId: offer._id.toString() }, offer.imageUrl).catch(() => {});
+      }
+    } catch (pushErr) {
+      console.warn('[Offer push notification error]:', pushErr.message);
+    }
+  }
+
   return res.status(201).json(new APIResponse(201, offer, 'Offer created'));
 });
 
@@ -62,9 +139,14 @@ const updateOffer = asyncHandler(async (req, res) => {
   const offer = await Offer.findById(req.params.id);
   if (!offer) throw new APIError(404, 'Offer not found');
 
+  if (req.file) {
+    const uploaded = await uploadOnCloudinary(req.file.path);
+    if (uploaded) offer.imageUrl = uploaded.secure_url;
+  }
+
   const allowed = [
     'title', 'description', 'discountPercent',
-    'minOrderAmount', 'startsAt', 'expiresAt', 'isActive',
+    'minOrderAmount', 'startsAt', 'expiresAt', 'isActive', 'imageUrl',
   ];
   allowed.forEach(field => {
     if (req.body[field] !== undefined) offer[field] = req.body[field];

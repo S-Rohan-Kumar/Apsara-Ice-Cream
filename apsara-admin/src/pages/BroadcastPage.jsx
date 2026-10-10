@@ -13,6 +13,8 @@ const TEMPLATES = [
 export function BroadcastPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [preview, setPreview] = useState('');
   const [targetAudience, setTargetAudience] = useState('all');
   const [result, setResult] = useState(null);
   const [currentTime, setCurrentTime] = useState('12:45 PM');
@@ -35,15 +37,19 @@ export function BroadcastPage() {
       return;
     }
     try {
-      const res = await broadcast({
-        title: title.trim(),
-        body: body.trim(),
-        data: { type: 'promotional', audience: targetAudience }
-      }).unwrap();
+      const fd = new FormData();
+      fd.append('title', title.trim());
+      fd.append('body', body.trim());
+      fd.append('type', 'promotional');
+      if (imageFile) fd.append('image', imageFile);
+
+      const res = await broadcast(fd).unwrap();
       setResult(res);
       showSuccess(`Broadcast delivered successfully to ${res.sent || res.totalUsers || 0} customers!`);
       setTitle('');
       setBody('');
+      setImageFile(null);
+      setPreview('');
     } catch (e) {
       showError(e?.data?.message || 'Failed to dispatch broadcast');
     }
@@ -173,6 +179,37 @@ export function BroadcastPage() {
               />
             </div>
 
+            <div>
+              <label className='text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5'>
+                Attached Image / Banner (Optional)
+              </label>
+              {preview ? (
+                <div className='relative mb-2 rounded-xl overflow-hidden border border-gray-200 h-28 w-full bg-gray-50'>
+                  <img src={preview} alt='Preview' className='w-full h-full object-cover' />
+                  <button
+                    type='button'
+                    onClick={() => { setImageFile(null); setPreview(''); }}
+                    className='absolute top-2 right-2 bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm'
+                  >
+                    ✕ Remove
+                  </button>
+                </div>
+              ) : null}
+              <input
+                type='file'
+                accept='image/*'
+                onChange={(e) => {
+                  const f = e.target.files[0];
+                  if (f) {
+                    setImageFile(f);
+                    setPreview(URL.createObjectURL(f));
+                  }
+                }}
+                className='w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[11px] file:font-black file:uppercase file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100 cursor-pointer'
+              />
+              <p className='text-[10px] text-gray-400 font-medium mt-1'>Adds rich media image to lock-screen push notifications</p>
+            </div>
+
             <div className='pt-2'>
               <button
                 type='button'
@@ -206,7 +243,7 @@ export function BroadcastPage() {
               </p>
             </div>
 
-            <div className='bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-lg'>
+            <div className='bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-lg space-y-3'>
               <div className='flex items-start gap-3'>
                 <div className='w-9 h-9 bg-[#1B4332] rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 border border-emerald-500/30'>
                   A
@@ -226,6 +263,11 @@ export function BroadcastPage() {
                   </p>
                 </div>
               </div>
+              {preview ? (
+                <div className='w-full h-36 rounded-xl overflow-hidden border border-white/15 bg-black/40 mt-1'>
+                  <img src={preview} alt='Rich Push Banner' className='w-full h-full object-cover' />
+                </div>
+              ) : null}
             </div>
           </div>
 

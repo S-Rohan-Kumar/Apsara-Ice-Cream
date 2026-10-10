@@ -2,6 +2,7 @@ import User from "../models/user.model.js";
 import Broadcast from "../models/broadcast.model.js";
 import { emitBroadcast } from "../socket/socket.js";
 import { sendExpoPush, sendFCMPush } from "../utils/send-push.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { APIResponse } from "../utils/api-response.js";
 import { APIError } from "../utils/api-error.js";
@@ -12,10 +13,17 @@ const broadcastNotification = asyncHandler(async (req, res) => {
     throw new APIError(400, "Title and body are required");
   }
 
+  let imageUrl = req.body.imageUrl || "";
+  if (req.file) {
+    const uploaded = await uploadOnCloudinary(req.file.path);
+    if (uploaded) imageUrl = uploaded.secure_url;
+  }
+
   const broadcast = await Broadcast.create({
     title: title.trim(),
     body: body.trim(),
     type,
+    imageUrl,
     sentBy: req.user?._id || null,
   });
 
@@ -24,6 +32,7 @@ const broadcastNotification = asyncHandler(async (req, res) => {
     title: broadcast.title,
     body: broadcast.body,
     type: broadcast.type,
+    imageUrl: broadcast.imageUrl,
     createdAt: broadcast.createdAt,
     ...data,
   });
@@ -53,6 +62,8 @@ const broadcastNotification = asyncHandler(async (req, res) => {
         data: {
           broadcastId: broadcast._id.toString(),
           type: broadcast.type,
+          imageUrl: broadcast.imageUrl,
+          image: broadcast.imageUrl,
           ...data,
         },
       });
@@ -71,7 +82,7 @@ const broadcastNotification = asyncHandler(async (req, res) => {
   }
 
   if (fcmTokens.length > 0) {
-    const fcmResult = await sendFCMPush(fcmTokens, broadcast.title, broadcast.body, data);
+    const fcmResult = await sendFCMPush(fcmTokens, broadcast.title, broadcast.body, { ...data, imageUrl: broadcast.imageUrl }, broadcast.imageUrl);
     sent += fcmResult.sent;
     failed += fcmResult.failed;
   }

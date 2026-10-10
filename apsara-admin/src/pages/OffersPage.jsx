@@ -39,6 +39,9 @@ export default function OffersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_OFFER);
+  const [imageFile, setImageFile] = useState(null);
+  const [preview, setPreview] = useState('');
+  const [sendPush, setSendPush] = useState(true);
   const [activeTab, setActiveTab] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -51,21 +54,57 @@ export default function OffersPage() {
   const [updateOffer] = useUpdateOfferMutation();
   const [deleteOffer] = useDeleteOfferMutation();
 
+  const openCreateModal = () => {
+    setEditing(null);
+    setForm(EMPTY_OFFER);
+    setImageFile(null);
+    setPreview('');
+    setSendPush(true);
+    setShowModal(true);
+  };
+
+  const openEditModal = (o) => {
+    setEditing(o);
+    setForm({
+      title: o.title,
+      description: o.description || '',
+      discountPercent: o.discountPercent,
+      category: o.category?._id || '',
+      startsAt: o.startsAt?.slice(0, 16) || '',
+      expiresAt: o.expiresAt?.slice(0, 16) || '',
+      minOrderAmount: o.minOrderAmount || 0,
+    });
+    setPreview(o.imageUrl || '');
+    setImageFile(null);
+    setShowModal(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const payload = {
-        ...form,
-        category: form.category || null,
-        discountPercent: Number(form.discountPercent),
-        minOrderAmount: Number(form.minOrderAmount) || 0
-      };
+      const fd = new FormData();
+      fd.append('title', form.title.trim());
+      if (form.description) fd.append('description', form.description.trim());
+      fd.append('discountPercent', String(Number(form.discountPercent)));
+      if (form.category) fd.append('category', form.category);
+      fd.append('minOrderAmount', String(Number(form.minOrderAmount) || 0));
+      fd.append('startsAt', form.startsAt);
+      fd.append('expiresAt', form.expiresAt);
+      if (imageFile) {
+        fd.append('image', imageFile);
+      } else if (preview && !imageFile) {
+        fd.append('imageUrl', preview);
+      }
+      if (!editing) {
+        fd.append('sendPush', String(sendPush));
+      }
+
       if (editing) {
-        await updateOffer({ id: editing._id, ...payload }).unwrap();
+        await updateOffer({ id: editing._id, formData: fd }).unwrap();
         showSuccess('Offer updated successfully');
       } else {
-        await createOffer(payload).unwrap();
-        showSuccess('Campaign published successfully');
+        await createOffer(fd).unwrap();
+        showSuccess(sendPush ? 'Offer published & Push Notification dispatched with banner!' : 'Campaign published successfully');
       }
       setShowModal(false);
     } catch (e) {
@@ -126,11 +165,7 @@ export default function OffersPage() {
         </div>
 
         <button
-          onClick={() => {
-            setEditing(null);
-            setForm(EMPTY_OFFER);
-            setShowModal(true);
-          }}
+          onClick={openCreateModal}
           className='bg-[#1B4332] hover:bg-[#163829] active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl shadow-xs transition text-xs uppercase tracking-wider flex items-center gap-2'
         >
           <span>＋</span>
@@ -205,6 +240,12 @@ export default function OffersPage() {
                 className='bg-white rounded-2xl border border-gray-200 shadow-xs hover:shadow-md transition p-5 flex flex-col justify-between'
               >
                 <div>
+                  {o.imageUrl && (
+                    <div className='mb-3.5 overflow-hidden rounded-xl h-28 w-full border border-gray-100 shadow-2xs'>
+                      <img src={o.imageUrl} alt={o.title} className='w-full h-full object-cover' />
+                    </div>
+                  )}
+
                   <div className='flex items-start justify-between gap-3 mb-4'>
                     <div className='flex items-center gap-3'>
                       <div className='w-12 h-12 bg-[#1B4332] rounded-xl flex flex-col items-center justify-center text-white shrink-0 shadow-xs'>
@@ -243,18 +284,7 @@ export default function OffersPage() {
 
                 <div className='flex items-center gap-2 pt-2 border-t border-gray-100'>
                   <button
-                    onClick={() => {
-                      setEditing(o);
-                      setForm({
-                        title: o.title,
-                        discountPercent: o.discountPercent,
-                        category: o.category?._id || '',
-                        startsAt: o.startsAt?.slice(0, 16) || '',
-                        expiresAt: o.expiresAt?.slice(0, 16) || '',
-                        minOrderAmount: o.minOrderAmount || 0
-                      });
-                      setShowModal(true);
-                    }}
+                    onClick={() => openEditModal(o)}
                     className='flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors'
                   >
                     Edit
@@ -384,12 +414,58 @@ export default function OffersPage() {
                 </div>
               </div>
 
+              <div>
+                <label className='text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5'>
+                  Offer Banner Image (Applies to Push Notifications & Store App)
+                </label>
+                {preview ? (
+                  <div className='relative mb-2 rounded-xl overflow-hidden border border-gray-200 h-32 w-full bg-gray-50'>
+                    <img src={preview} alt='Preview' className='w-full h-full object-cover' />
+                    <button
+                      type='button'
+                      onClick={() => { setImageFile(null); setPreview(''); }}
+                      className='absolute top-2 right-2 bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm'
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+                ) : null}
+                <input
+                  type='file'
+                  accept='image/*'
+                  onChange={(e) => {
+                    const f = e.target.files[0];
+                    if (f) {
+                      setImageFile(f);
+                      setPreview(URL.createObjectURL(f));
+                    }
+                  }}
+                  className='w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[11px] file:font-black file:uppercase file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100 cursor-pointer'
+                />
+                <p className='text-[10px] text-gray-400 font-medium mt-1'>Upload high quality landscape/square banner for rich push notifications</p>
+              </div>
+
+              {!editing && (
+                <label className='flex items-center gap-3 p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl cursor-pointer select-none'>
+                  <input
+                    type='checkbox'
+                    checked={sendPush}
+                    onChange={(e) => setSendPush(e.target.checked)}
+                    className='w-4 h-4 text-[#1B4332] rounded focus:ring-emerald-500 border-gray-300'
+                  />
+                  <div>
+                    <p className='text-xs font-black text-emerald-950'>📢 Send Rich Push Notification</p>
+                    <p className='text-[10px] font-semibold text-emerald-700'>Instantly sends lock-screen push notification with this banner to customer devices</p>
+                  </div>
+                </label>
+              )}
+
               <div className='pt-2'>
                 <button
                   type='submit'
-                  className='w-full bg-[#1B4332] hover:bg-[#163829] text-white py-3 rounded-xl font-bold uppercase text-xs tracking-wider transition'
+                  className='w-full bg-[#1B4332] hover:bg-[#163829] text-white py-3 rounded-xl font-bold uppercase text-xs tracking-wider transition shadow-sm'
                 >
-                  Save Campaign
+                  {editing ? 'Update Campaign' : 'Publish & Dispatch Offer'}
                 </button>
               </div>
             </form>

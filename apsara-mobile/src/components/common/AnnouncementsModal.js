@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +36,13 @@ export default function AnnouncementsModal({ visible, onClose, broadcasts }) {
             {formattedDate ? <Text style={styles.cardDate}>{formattedDate}</Text> : null}
           </View>
         </View>
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.cardImage}
+            resizeMode="cover"
+          />
+        ) : null}
         <Text style={styles.cardBody}>{item.body}</Text>
       </View>
     );
@@ -177,6 +185,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
     marginTop: 4,
+  },
+  cardImage: {
+    width: '100%',
+    height: 140,
+    borderRadius: radius.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.borderLight,
   },
   emptyContainer: {
     padding: spacing.xxl,

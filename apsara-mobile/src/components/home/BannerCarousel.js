@@ -78,7 +78,9 @@ const mapOffersToBanners = (offersList = []) => {
     const catId = o.category?._id || (typeof o.category === 'string' ? o.category : null);
     const catImg = o.category?.imageUrl;
     const fallbackImg = OFFER_FALLBACK_IMAGES[idx % OFFER_FALLBACK_IMAGES.length];
-    const imageToUse = catImg && catImg.trim() !== '' ? catImg : fallbackImg;
+    const imageToUse = (o.imageUrl && o.imageUrl.trim() !== '')
+      ? o.imageUrl
+      : (catImg && catImg.trim() !== '' ? catImg : fallbackImg);
 
     return {
       _id: o._id,

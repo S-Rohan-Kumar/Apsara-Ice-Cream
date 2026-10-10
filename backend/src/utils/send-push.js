@@ -48,25 +48,34 @@ export const sendExpoPush = async (messages) => {
   return { sent, failed };
 };
 
-export const sendFCMPush = async (fcmTokens, title, body, data = {}) => {
+export const sendFCMPush = async (fcmTokens, title, body, data = {}, imageUrl = '') => {
   if (!fcmTokens || fcmTokens.length === 0) return { sent: 0, failed: 0 };
 
+  const img = imageUrl || data.imageUrl || data.image || '';
   let sent = 0;
   let failed = 0;
 
   for (const token of fcmTokens) {
     try {
-      await admin.messaging().send({
+      const message = {
         token,
-        notification: { title, body },
+        notification: {
+          title,
+          body,
+          ...(img ? { imageUrl: img } : {}),
+        },
         data: Object.fromEntries(
-          Object.entries(data).map(([k, v]) => [k, String(v)])
+          Object.entries({ ...data, ...(img ? { imageUrl: img, image: img } : {}) }).map(([k, v]) => [k, String(v)])
         ),
         android: {
           priority: 'high',
-          notification: { channelId: 'store_broadcasts' },
+          notification: {
+            channelId: 'store_broadcasts',
+            ...(img ? { imageUrl: img } : {}),
+          },
         },
-      });
+      };
+      await admin.messaging().send(message);
       sent++;
     } catch (err) {
       failed++;

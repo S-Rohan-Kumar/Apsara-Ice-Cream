@@ -17,6 +17,10 @@ const broadcastSchema = new mongoose.Schema(
       enum: ['promotional', 'festival', 'announcement', 'alert'],
       default: 'promotional',
     },
+    imageUrl: {
+      type: String,
+      default: '',
+    },
     sentBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

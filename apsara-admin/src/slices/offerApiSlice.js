@@ -23,10 +23,10 @@ export const offerApiSlice = apiSlice.injectEndpoints({
     }),
 
     updateOffer: builder.mutation({
-      query: ({ id, ...data }) => ({
+      query: ({ id, formData, ...data }) => ({
         url: `${OFFERS_URL}/${id}`,
         method: "PATCH",
-        body: data,
+        body: formData || data,
       }),
       transformResponse: (res) => res.data,
       invalidatesTags: ["Offer", "Product"],
