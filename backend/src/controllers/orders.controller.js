@@ -58,20 +58,39 @@ const calculateOrderPricing = (items, productMap, activeOffers) => {
     subtotal += base * item.quantity;
   }
 
+  const uniqueCategoryIds = Array.from(new Set(orderItems.map(it => it.categoryId).filter(Boolean)));
+  const totalQuantity = orderItems.reduce((acc, it) => acc + it.quantity, 0);
+
   let totalDiscount = 0;
-  for (const offer of activeOffers) {
-    const targetCatId = offer.category ? (offer.category._id || offer.category).toString() : null;
-    const qualifyingItems = targetCatId
-      ? orderItems.filter(it => it.categoryId === targetCatId)
-      : orderItems;
+  let appliedOffer = null;
 
-    const catSubtotal = qualifyingItems.reduce((acc, it) => acc + it.totalPrice, 0);
-    const minReq = offer.minOrderAmount || 0;
+  // Rule 1: If strictly 1 category is present in cart, evaluate category-specific offer
+  if (uniqueCategoryIds.length === 1) {
+    const singleCatId = uniqueCategoryIds[0];
+    const categoryOffer = activeOffers.find(off => {
+      const targetCatId = off.category ? (off.category._id || off.category).toString() : null;
+      return targetCatId === singleCatId;
+    });
 
-    if (catSubtotal > 0 && catSubtotal >= minReq) {
-      const disc = Math.round(catSubtotal * (offer.discountPercent / 100));
-      if (disc > totalDiscount) {
-        totalDiscount = disc;
+    if (categoryOffer) {
+      const minReq = categoryOffer.minOrderAmount || 0;
+      const minQty = categoryOffer.minQuantity || 1;
+      if (subtotal >= minReq && totalQuantity >= minQty) {
+        totalDiscount = Math.round(subtotal * (categoryOffer.discountPercent / 100));
+        appliedOffer = categoryOffer;
+      }
+    }
+  }
+
+  // Rule 2: If mix of categories or category offer requirements were not met, evaluate storewide All-Category offer
+  if (!appliedOffer) {
+    const allCategoryOffer = activeOffers.find(off => !off.category);
+    if (allCategoryOffer) {
+      const minReq = allCategoryOffer.minOrderAmount || 0;
+      const minQty = allCategoryOffer.minQuantity || 1;
+      if (subtotal >= minReq && totalQuantity >= minQty) {
+        totalDiscount = Math.round(subtotal * (allCategoryOffer.discountPercent / 100));
+        appliedOffer = allCategoryOffer;
       }
     }
   }

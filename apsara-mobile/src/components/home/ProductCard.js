@@ -44,8 +44,11 @@ function ProductCard({ product, onOpenVariants, onOpenDetail }) {
     : product.resolvedPrices?.regular || 0;
 
   const effectiveBasePrice = regularBase > 0 ? regularBase : regularResolved;
-  const hasDiscount = Boolean(product.appliedOffer && regularBase > regularResolved);
-  const showOfferBadge = Boolean(product.appliedOffer);
+  const isSpecialCategoryOffer = Boolean(
+    product.appliedOffer &&
+    (product.appliedOffer.isCategorySpecific || product.appliedOffer.category)
+  );
+  const showOfferBadge = isSpecialCategoryOffer;
 
   const handleAddPress = () => {
     if (!isAvailable) return;
@@ -128,9 +131,7 @@ function ProductCard({ product, onOpenVariants, onOpenDetail }) {
         {showOfferBadge && (
           <View style={styles.discountBadge}>
             <Text style={styles.discountText}>
-              {product.appliedOffer.minOrderAmount > 0
-                ? `${product.appliedOffer.discountPercent}% OFF >₹${product.appliedOffer.minOrderAmount}`
-                : `${product.appliedOffer.discountPercent}% OFF`}
+              {product.appliedOffer.discountPercent}% OFF *T&C
             </Text>
           </View>
         )}
@@ -178,12 +179,9 @@ function ProductCard({ product, onOpenVariants, onOpenDetail }) {
         </Text>
 
         <View style={styles.pricingRow}>
-          {hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && (
-            <Text style={styles.strikethroughPrice}>₹{effectiveBasePrice}</Text>
-          )}
-          <View style={hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) ? styles.discountedPriceBadge : styles.normalPriceBadge}>
-            <Text style={hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) ? styles.discountedPriceText : styles.normalPriceText}>
-              ₹{(!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && hasDiscount ? regularResolved : effectiveBasePrice}{isIceCream ? '+' : ''}
+          <View style={styles.normalPriceBadge}>
+            <Text style={styles.normalPriceText}>
+              ₹{effectiveBasePrice}{isIceCream ? '+' : ''}
             </Text>
           </View>
         </View>

@@ -49,9 +49,12 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
               const price = product.resolvedPrices?.[v] || 0;
               const basePrice = product.basePrices?.[v] || product.priceOverride?.[v] || product.category?.basePrice?.[v] || price;
               const effectivePrice = basePrice > 0 ? basePrice : price;
-              const hasDiscount = Boolean(product.appliedOffer && basePrice > price);
+              const isSpecialCategoryOffer = Boolean(
+                product.appliedOffer &&
+                (product.appliedOffer.isCategorySpecific || product.appliedOffer.category)
+              );
+              const showOfferBadge = isSpecialCategoryOffer;
               const isAvailable = (product.variantAvailability?.[v] ?? product.availableVariants?.[v] ?? true) !== false && product.isAvailable !== false;
-              const showOfferBadge = Boolean(product.appliedOffer);
               const qty = getItemQuantity(product._id, v);
 
               return (
@@ -75,9 +78,7 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
                       {showOfferBadge && (
                         <View style={styles.offerBadge}>
                           <Text style={styles.offerBadgeText}>
-                            {product.appliedOffer.minOrderAmount > 0
-                              ? `${product.appliedOffer.discountPercent}% OFF >₹${product.appliedOffer.minOrderAmount}`
-                              : `${product.appliedOffer.discountPercent}% OFF`}
+                            {product.appliedOffer.discountPercent}% OFF *T&C
                           </Text>
                         </View>
                       )}
@@ -85,13 +86,8 @@ export default function VariantSelectorModal({ visible, product, onClose }) {
                     <Text style={styles.variantMl}>{meta.ml}</Text>
                     <View style={styles.priceRow}>
                       <Text style={[styles.variantPrice, !isAvailable && styles.disabledText]}>
-                        ₹{(!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && hasDiscount ? price : effectivePrice}
+                        ₹{effectivePrice}
                       </Text>
-                      {hasDiscount && (!product.appliedOffer?.minOrderAmount || product.appliedOffer?.minOrderAmount === 0) && (
-                        <Text style={styles.variantOriginalPrice}>
-                          ₹{effectivePrice}
-                        </Text>
-                      )}
                     </View>
                   </View>
 

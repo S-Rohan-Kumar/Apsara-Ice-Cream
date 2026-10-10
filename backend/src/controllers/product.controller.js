@@ -36,13 +36,17 @@ const resolvePrice = (product, category, activeOffers) => {
     const categoryIdStr = category._id
         ? category._id.toString()
         : category.toString();
-    const offer = activeOffers.find(
+
+    // Prioritize specific category offer over general all-category offer
+    const categoryOffer = activeOffers.find(
         (o) =>
-            !o.category ||
+            o.category &&
             (o.category._id
                 ? o.category._id.toString()
                 : o.category.toString()) === categoryIdStr,
     );
+    const allCategoryOffer = activeOffers.find((o) => !o.category);
+    const offer = categoryOffer || allCategoryOffer;
 
     if (!offer) {
         return { basePrices: base, resolvedPrices: base, appliedOffer: null };
@@ -62,6 +66,8 @@ const resolvePrice = (product, category, activeOffers) => {
             title: offer.title,
             discountPercent: offer.discountPercent,
             minOrderAmount: offer.minOrderAmount || 0,
+            minQuantity: offer.minQuantity || 1,
+            isCategorySpecific: Boolean(offer.category),
             category: offer.category,
             expiresAt: offer.expiresAt,
         },

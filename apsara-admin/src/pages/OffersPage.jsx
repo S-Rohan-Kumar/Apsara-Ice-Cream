@@ -28,11 +28,13 @@ const fmtDate = (iso) => {
 
 const EMPTY_OFFER = {
   title: '',
+  description: '',
   discountPercent: '',
   category: '',
   startsAt: '',
   expiresAt: '',
-  minOrderAmount: 0
+  minOrderAmount: 0,
+  minQuantity: 1,
 };
 
 export default function OffersPage() {
@@ -73,6 +75,7 @@ export default function OffersPage() {
       startsAt: o.startsAt?.slice(0, 16) || '',
       expiresAt: o.expiresAt?.slice(0, 16) || '',
       minOrderAmount: o.minOrderAmount || 0,
+      minQuantity: o.minQuantity || 1,
     });
     setPreview(o.imageUrl || '');
     setImageFile(null);
@@ -88,6 +91,7 @@ export default function OffersPage() {
       fd.append('discountPercent', String(Number(form.discountPercent)));
       if (form.category) fd.append('category', form.category);
       fd.append('minOrderAmount', String(Number(form.minOrderAmount) || 0));
+      fd.append('minQuantity', String(Number(form.minQuantity) || 1));
       fd.append('startsAt', form.startsAt);
       fd.append('expiresAt', form.expiresAt);
       if (imageFile) {
@@ -274,9 +278,9 @@ export default function OffersPage() {
                       </span>
                     </div>
                     <div className='flex items-center justify-between'>
-                      <span className='text-gray-400 font-medium'>Min Order</span>
+                      <span className='text-gray-400 font-medium'>Min Condition</span>
                       <span className='text-[#1B4332] font-bold text-[11px]'>
-                        {o.minOrderAmount > 0 ? `₹${o.minOrderAmount}` : 'No Minimum Order'}
+                        {o.minOrderAmount > 0 ? `₹${o.minOrderAmount}` : 'No Min ₹'} • {o.minQuantity > 1 ? `${o.minQuantity} items min` : '1+ items'}
                       </span>
                     </div>
                   </div>
@@ -362,7 +366,7 @@ export default function OffersPage() {
                 </div>
               </div>
 
-              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+              <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
                 <div className='space-y-1'>
                   <label className='text-[10px] font-bold text-gray-500 uppercase tracking-wider'>Applies To</label>
                   <select
@@ -386,6 +390,17 @@ export default function OffersPage() {
                     placeholder='0 for no minimum'
                     value={form.minOrderAmount}
                     onChange={(e) => setForm({ ...form, minOrderAmount: e.target.value })}
+                    className='w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1B4332]/20 focus:border-[#1B4332]'
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <label className='text-[10px] font-bold text-gray-500 uppercase tracking-wider'>Min Qty (Items)</label>
+                  <input
+                    type='number'
+                    min='1'
+                    placeholder='1'
+                    value={form.minQuantity}
+                    onChange={(e) => setForm({ ...form, minQuantity: e.target.value })}
                     className='w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1B4332]/20 focus:border-[#1B4332]'
                   />
                 </div>

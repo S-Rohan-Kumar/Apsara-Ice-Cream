@@ -122,7 +122,10 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
     : currentProduct.resolvedPrices?.regular || 0;
 
   const effectiveBasePrice = regularBase > 0 ? regularBase : regularResolved;
-  const hasDiscount = Boolean(currentProduct.appliedOffer && regularBase > regularResolved);
+  const isSpecialCategoryOffer = Boolean(
+    currentProduct.appliedOffer &&
+    (currentProduct.appliedOffer.isCategorySpecific || currentProduct.appliedOffer.category)
+  );
 
   const handleAddPress = () => {
     if (!isAvailable) return;
@@ -249,10 +252,14 @@ export default function ProductDetailModal({ visible, product, onClose, onOpenVa
                   <Text style={styles.productName}>{currentProduct.name}</Text>
                   <View style={styles.priceRow}>
                     <Text style={styles.priceText}>
-                      ₹{(!currentProduct.appliedOffer?.minOrderAmount || currentProduct.appliedOffer?.minOrderAmount === 0) && hasDiscount ? regularResolved : effectiveBasePrice}
+                      ₹{effectiveBasePrice}
                     </Text>
-                    {hasDiscount && (!currentProduct.appliedOffer?.minOrderAmount || currentProduct.appliedOffer?.minOrderAmount === 0) && (
-                      <Text style={styles.strikethroughPrice}>₹{effectiveBasePrice}</Text>
+                    {isSpecialCategoryOffer && (
+                      <View style={styles.categoryOfferBadge}>
+                        <Text style={styles.categoryOfferBadgeText}>
+                          {currentProduct.appliedOffer.discountPercent}% OFF *T&C
+                        </Text>
+                      </View>
                     )}
                     {isIceCream && (
                       <View style={styles.startingBadge}>
@@ -442,6 +449,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  categoryOfferBadge: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  categoryOfferBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: '#B45309',
+    letterSpacing: 0.3,
   },
   startingAtText: {
     fontSize: 9.5,

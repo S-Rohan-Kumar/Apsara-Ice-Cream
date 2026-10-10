@@ -7,6 +7,7 @@ const offerSchema = new Schema(
     category: { type: Schema.Types.ObjectId, ref: "Category", default: null },
     discountPercent: { type: Number, required: true, min: 1, max: 100 },
     minOrderAmount: { type: Number, default: 0 },
+    minQuantity: { type: Number, default: 1, min: 1 },
     imageUrl: { type: String, default: "" },
     startsAt: { type: Date, required: true },
     expiresAt: { type: Date, required: true },

@@ -149,31 +149,64 @@ export default function CartScreen() {
   let offerNudge = null;
 
   if (activeOffers.length > 0 && items.length > 0) {
-    for (const off of activeOffers) {
-      const rawTargetCat = off.category ? (off.category._id || off.category) : null;
-      const targetCatId = rawTargetCat ? (rawTargetCat._id ? rawTargetCat._id.toString() : rawTargetCat.toString()) : null;
-      const qualifyingItems = targetCatId
-        ? items.filter((it) => {
-            const rawCat = it.categoryId ? (it.categoryId._id || it.categoryId) : null;
-            const itCat = rawCat ? rawCat.toString() : (it.categoryId ? it.categoryId.toString() : '');
-            return itCat === targetCatId;
+    const totalQuantity = items.reduce((acc, it) => acc + (it.quantity || 0), 0);
+    const uniqueCategoryIds = Array.from(
+      new Set(
+        items
+          .map((it) => {
+            const raw = it.categoryId;
+            return raw ? (raw._id ? raw._id.toString() : raw.toString()) : null;
           })
-        : items;
+          .filter(Boolean)
+      )
+    );
 
-      const catSubtotal = qualifyingItems.reduce((acc, it) => acc + (it.price || 0) * (it.quantity || 0), 0);
+    // Rule 1: If strictly 1 category is present in cart, evaluate category-specific offer
+    if (uniqueCategoryIds.length === 1) {
+      const singleCatId = uniqueCategoryIds[0];
+      const categoryOffer = activeOffers.find((off) => {
+        const rawTargetCat = off.category ? (off.category._id || off.category) : null;
+        const targetCatId = rawTargetCat ? (rawTargetCat._id ? rawTargetCat._id.toString() : rawTargetCat.toString()) : null;
+        return targetCatId === singleCatId;
+      });
 
-      if (catSubtotal > 0) {
-        const minReq = off.minOrderAmount || 0;
-        if (catSubtotal >= minReq) {
-          const disc = Math.round(catSubtotal * (off.discountPercent / 100));
-          if (disc > offerDiscount) {
-            offerDiscount = disc;
-            activeOfferObj = off;
+      if (categoryOffer) {
+        const minReq = categoryOffer.minOrderAmount || 0;
+        const minQty = categoryOffer.minQuantity || 1;
+        if (subtotal >= minReq && totalQuantity >= minQty) {
+          offerDiscount = Math.round(subtotal * (categoryOffer.discountPercent / 100));
+          activeOfferObj = categoryOffer;
+        } else {
+          const catName = categoryOffer.category?.name || 'items';
+          if (totalQuantity < minQty) {
+            const diffQty = minQty - totalQuantity;
+            offerNudge = `Add ${diffQty} more ${catName} ${diffQty === 1 ? 'item' : 'items'} to unlock ${categoryOffer.discountPercent}% OFF with ${categoryOffer.title}!`;
+          } else if (subtotal < minReq) {
+            const diffAmt = minReq - subtotal;
+            offerNudge = `Add ₹${diffAmt} more to unlock ${categoryOffer.discountPercent}% OFF with ${categoryOffer.title}!`;
           }
+        }
+      }
+    }
+
+    // Rule 2: If mix of categories or category offer not qualified ("or else"), evaluate All-Category offer
+    if (!activeOfferObj) {
+      const allCategoryOffer = activeOffers.find((off) => !off.category);
+      if (allCategoryOffer) {
+        const minReq = allCategoryOffer.minOrderAmount || 0;
+        const minQty = allCategoryOffer.minQuantity || 1;
+        if (subtotal >= minReq && totalQuantity >= minQty) {
+          offerDiscount = Math.round(subtotal * (allCategoryOffer.discountPercent / 100));
+          activeOfferObj = allCategoryOffer;
+          offerNudge = null;
         } else if (!offerNudge) {
-          const diff = minReq - catSubtotal;
-          const catName = off.category?.name || 'items';
-          offerNudge = `Add ₹${diff} more of ${catName} to unlock ${off.discountPercent}% OFF with ${off.title}!`;
+          if (totalQuantity < minQty) {
+            const diffQty = minQty - totalQuantity;
+            offerNudge = `Add ${diffQty} more ${diffQty === 1 ? 'item' : 'items'} to unlock ${allCategoryOffer.discountPercent}% OFF with ${allCategoryOffer.title}!`;
+          } else if (subtotal < minReq) {
+            const diffAmt = minReq - subtotal;
+            offerNudge = `Add ₹${diffAmt} more to unlock ${allCategoryOffer.discountPercent}% OFF with ${allCategoryOffer.title}!`;
+          }
         }
       }
     }

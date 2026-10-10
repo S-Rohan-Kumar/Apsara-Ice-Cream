@@ -32,7 +32,7 @@ const getAllOffers = asyncHandler(async (req, res) => {
 const createOffer = asyncHandler(async (req, res) => { 
   const {
     title, description, category,
-    discountPercent, minOrderAmount,
+    discountPercent, minOrderAmount, minQuantity,
     startsAt, expiresAt,
   } = req.body;
 
@@ -58,6 +58,7 @@ const createOffer = asyncHandler(async (req, res) => {
     category      : category || null,
     discountPercent: Number(discountPercent),
     minOrderAmount : Number(minOrderAmount) || 0,
+    minQuantity    : Number(minQuantity) > 0 ? Number(minQuantity) : 1,
     imageUrl,
     startsAt       : new Date(startsAt),
     expiresAt      : new Date(expiresAt),
@@ -146,7 +147,7 @@ const updateOffer = asyncHandler(async (req, res) => {
 
   const allowed = [
     'title', 'description', 'discountPercent',
-    'minOrderAmount', 'startsAt', 'expiresAt', 'isActive', 'imageUrl',
+    'minOrderAmount', 'minQuantity', 'startsAt', 'expiresAt', 'isActive', 'imageUrl',
   ];
   allowed.forEach(field => {
     if (req.body[field] !== undefined) offer[field] = req.body[field];
