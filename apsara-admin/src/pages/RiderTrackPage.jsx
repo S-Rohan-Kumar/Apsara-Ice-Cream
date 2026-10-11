@@ -363,13 +363,13 @@ export default function RiderTrackPage() {
           )}
         </div>
 
-        {/* Payment Amount Card - HIGH VISIBILITY FOR RIDER */}
+        {/* Payment Status Card - Amount ONLY shown if COD */}
         <div className={`rounded-2xl p-4 border shadow-xs ${
           isCod
             ? 'bg-amber-50 border-amber-300 text-amber-950'
             : 'bg-emerald-50 border-emerald-300 text-emerald-950'
         }`}>
-          <div className='flex items-center justify-between'>
+          <div className='flex items-center justify-between gap-3'>
             <div>
               <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
                 isCod ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
@@ -379,13 +379,20 @@ export default function RiderTrackPage() {
               <h3 className='text-sm font-black mt-1'>
                 {isCod ? '⚠️ COLLECT CASH FROM CUSTOMER' : '✅ DO NOT COLLECT CASH'}
               </h3>
+              {!isCod && (
+                <p className='text-[11px] text-emerald-700 font-medium mt-0.5'>
+                  Customer has already paid online. No cash collection needed.
+                </p>
+              )}
             </div>
-            <div className='text-right'>
-              <span className='text-[10px] font-bold text-gray-500 uppercase block'>Order Amount</span>
-              <span className='text-xl font-black font-mono'>
-                {currency(orderAmount)}
-              </span>
-            </div>
+            {isCod && (
+              <div className='text-right shrink-0'>
+                <span className='text-[10px] font-bold text-amber-800 uppercase block'>Amount to Collect</span>
+                <span className='text-xl font-black font-mono text-amber-950'>
+                  {currency(orderAmount)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
