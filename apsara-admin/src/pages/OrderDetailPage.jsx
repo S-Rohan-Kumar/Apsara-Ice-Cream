@@ -418,28 +418,90 @@ export default function OrderDetailPage() {
 
           <div className='bg-white rounded-2xl border border-gray-200 p-6 shadow-xs'>
             <h2 className='text-xs font-bold uppercase tracking-wider text-slate-800 mb-3 pb-2 border-b border-gray-100'>
-              Status Advancement
+              Delivery & Order Status
             </h2>
 
-            {nextStatuses.length === 0 ? (
-              <p className='text-xs text-gray-400 font-semibold text-center py-2'>
-                No further actions required for this order.
-              </p>
-            ) : (
+            {order.status === 'placed' && (
               <div className='space-y-2.5'>
-                {nextStatuses.map((st) => {
-                  const cfg = ACTION_CONFIG[st] || { label: STATUS_LABELS[st] || st, btnClass: 'bg-[#1B4332] text-white' };
-                  return (
-                    <button
-                      key={st}
-                      onClick={() => handleUpdate(st)}
-                      disabled={updating}
-                      className={`w-full py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 ${cfg.btnClass}`}
-                    >
-                      <span>{cfg.label}</span>
-                    </button>
-                  );
-                })}
+                <button
+                  onClick={() => handleUpdate('preparing')}
+                  disabled={updating}
+                  className='w-full py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#1B4332] hover:bg-[#163829] text-white transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50'
+                >
+                  <span>Start Preparing & Packing</span>
+                </button>
+                <button
+                  onClick={() => handleUpdate('cancelled')}
+                  disabled={updating}
+                  className='w-full py-2.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50'
+                >
+                  <span>Cancel Order</span>
+                </button>
+              </div>
+            )}
+
+            {order.status === 'preparing' && (
+              <div className='space-y-3'>
+                <button
+                  onClick={handleWhatsAppDelivery}
+                  className='w-full py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition-all flex items-center justify-center gap-2 shadow-xs active:scale-[0.99]'
+                >
+                  <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+                    <path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'></path>
+                  </svg>
+                  <span>📲 Share with Rider (WhatsApp)</span>
+                </button>
+                <p className='text-[10px] text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-relaxed font-semibold'>
+                  💡 Order transitions to <b>Out for Delivery</b> automatically when the rider taps <b>"Order Picked"</b> in their link and enables GPS.
+                </p>
+                <button
+                  onClick={() => handleUpdate('cancelled')}
+                  disabled={updating}
+                  className='w-full py-2 px-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 border border-gray-200 transition-all'
+                >
+                  <span>Cancel Order</span>
+                </button>
+              </div>
+            )}
+
+            {order.status === 'out_for_delivery' && (
+              <div className='p-4 rounded-xl bg-blue-50 border border-blue-200 space-y-2'>
+                <div className='flex items-center gap-2 text-blue-900 font-black text-xs uppercase'>
+                  <span className='w-2 h-2 rounded-full bg-blue-500 animate-pulse'></span>
+                  <span>Out for Delivery</span>
+                </div>
+                <p className='text-xs text-blue-800 font-bold'>
+                  Rider: {order.deliveryStaff?.name || order.delivery?.riderName || 'Assigned Staff'}
+                  {order.deliveryStaff?.phone && ` (+91 ${order.deliveryStaff.phone})`}
+                </p>
+                <p className='text-[11px] text-blue-700 leading-relaxed font-medium'>
+                  Delivery will complete automatically when the rider collects payment and enters the customer's 4-digit Delivery OTP.
+                </p>
+              </div>
+            )}
+
+            {order.status === 'delivered' && (
+              <div className='p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center space-y-1'>
+                <div className='text-emerald-800 font-black text-xs uppercase flex items-center justify-center gap-1.5'>
+                  <span>✓ Order Delivered & Completed</span>
+                </div>
+                {order.deliveryStaff?.name && (
+                  <p className='text-[11px] text-emerald-700 font-semibold'>
+                    Delivered by {order.deliveryStaff.name}
+                  </p>
+                )}
+                <p className='text-[10px] text-emerald-600 font-medium'>
+                  Customer OTP verified successfully.
+                </p>
+              </div>
+            )}
+
+            {order.status === 'cancelled' && (
+              <div className='p-4 rounded-xl bg-rose-50 border border-rose-200 text-center'>
+                <p className='text-xs font-black uppercase text-rose-800'>Order Cancelled</p>
+                <p className='text-[11px] text-rose-600 mt-1 font-medium'>
+                  {order.cancellationReason || 'Cancelled'}
+                </p>
               </div>
             )}
           </div>

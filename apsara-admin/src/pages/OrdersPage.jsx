@@ -411,11 +411,11 @@ export function OrdersPage() {
                       </Link>
                     </div>
 
-                    {order.status !== 'delivered' && order.status !== 'cancelled' ? (
+                    {order.status === 'placed' && (
                       <button
-                        onClick={() => handleAdvanceStatus(order._id, order.orderNumber, nextStatus)}
+                        onClick={() => handleAdvanceStatus(order._id, order.orderNumber, 'preparing')}
                         disabled={updatingOrderId === order._id}
-                        className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-sm active:scale-[0.99] disabled:opacity-75 flex items-center justify-center gap-2 ${btnClass}`}
+                        className='w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-[#1B4332] hover:bg-[#163829] text-white transition shadow-sm active:scale-[0.99] disabled:opacity-75 flex items-center justify-center gap-2'
                       >
                         {updatingOrderId === order._id ? (
                           <>
@@ -423,21 +423,55 @@ export function OrdersPage() {
                               <circle cx='12' cy='10' r='10'></circle>
                               <path d='M12 2a10 10 0 0 1 10 10'></path>
                             </svg>
-                            <span>Updating...</span>
+                            <span>Accepting...</span>
                           </>
                         ) : (
-                          actionLabel
+                          'Accept & Start Packing'
                         )}
                       </button>
-                    ) : (
-                      <div className={`w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border ${
-                        order.status === 'delivered'
-                          ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
-                          : 'text-rose-800 bg-rose-50 border-rose-200'
-                      }`}>
-                        {order.status === 'delivered'
-                          ? 'Completed & Delivered'
-                          : (order.cancellationReason || 'Cancelled by Customer (< 1 min)')}
+                    )}
+
+                    {order.status === 'preparing' && (
+                      <div className='flex flex-col gap-2'>
+                        <button
+                          onClick={() => handleShareWhatsApp(order)}
+                          className='w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.99]'
+                        >
+                          <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                            <path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'></path>
+                          </svg>
+                          <span>📲 Share with Rider (WhatsApp)</span>
+                        </button>
+                        <p className='text-[10px] text-center font-bold text-amber-800 bg-amber-50 py-1.5 px-2 rounded-lg border border-amber-200'>
+                          Rider must tap link on phone to pick up & start GPS
+                        </p>
+                      </div>
+                    )}
+
+                    {order.status === 'out_for_delivery' && (
+                      <div className='w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border border-blue-200 bg-blue-50 text-blue-800 flex flex-col gap-1'>
+                        <div className='flex items-center justify-center gap-1.5'>
+                          <span className='w-2 h-2 rounded-full bg-blue-500 animate-pulse'></span>
+                          <span>Out for Delivery • {order.deliveryStaff?.name || order.delivery?.riderName || 'Rider'}</span>
+                        </div>
+                        <span className='text-[10px] text-blue-600 font-medium'>
+                          Awaiting OTP verification at customer doorstep
+                        </span>
+                      </div>
+                    )}
+
+                    {order.status === 'delivered' && (
+                      <div className='w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 flex items-center justify-center gap-1.5'>
+                        <span>✓ Completed & Delivered</span>
+                        {order.deliveryStaff?.name && (
+                          <span className='text-[10px] text-emerald-600 font-semibold'>({order.deliveryStaff.name})</span>
+                        )}
+                      </div>
+                    )}
+
+                    {order.status === 'cancelled' && (
+                      <div className='w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-800'>
+                        {order.cancellationReason || 'Cancelled by Customer (< 1 min)'}
                       </div>
                     )}
                   </div>

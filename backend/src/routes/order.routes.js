@@ -11,6 +11,8 @@ import {
   getMonthlyReport,
   getRiderOrderDetails,
   updateRiderLocation,
+  startRiderDelivery,
+  verifyRiderDeliveryOtp,
 } from "../controllers/orders.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import adminMiddleware from "../middleware/admin.middleware.js";
@@ -19,6 +21,8 @@ const router = Router();
 
 router.get("/rider-track/:id", getRiderOrderDetails);
 router.post("/rider-track/:id/location", updateRiderLocation);
+router.post("/rider-track/:id/start", startRiderDelivery);
+router.post("/rider-track/:id/verify-otp", verifyRiderDeliveryOtp);
 
 router.post("/initiate", authMiddleware, initiateOrder);
 router.post("/confirm", authMiddleware, confirmOrder);

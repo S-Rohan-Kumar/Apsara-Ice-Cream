@@ -67,7 +67,17 @@ const OrderSchema = new Schema({
       updatedAt: { type: Date },
     },
     riderTrackingToken: { type: String },
+    riderName: { type: String, default: null },
+    riderPhone: { type: String, default: null },
   },
+  deliveryStaff: {
+    staffId: { type: String, default: null },
+    name: { type: String, default: null },
+    phone: { type: String, default: null },
+    assignedAt: { type: Date, default: null },
+  },
+  deliveryOtp: { type: String, default: null },
+  deliveryOtpVerified: { type: Boolean, default: false },
   pricing: {
     subtotal      : { type: Number, required: true },
     discountAmount: { type: Number, default: 0 },

@@ -11,6 +11,7 @@ import OffersPage         from '../pages/OffersPage';
 import BroadcastPage      from '../pages/BroadcastPage';
 import ReportsPage        from '../pages/ReportsPage';
 import RiderTrackPage     from '../pages/RiderTrackPage';
+import StaffPage          from '../pages/StaffPage';
 
 function ProtectedRoute() {
   const userInfo = useSelector(selectUserInfo);
@@ -52,6 +53,7 @@ export default function AppRouter() {
           <Route element={<OwnerOnlyRoute />}>
             <Route path='/categories' element={<CategoriesPage />} />
             <Route path='/offers'     element={<OffersPage />} />
+            <Route path='/staff'      element={<StaffPage />} />
             <Route path='/broadcast'  element={<BroadcastPage />} />
             <Route path='/reports'    element={<ReportsPage />} />
           </Route>

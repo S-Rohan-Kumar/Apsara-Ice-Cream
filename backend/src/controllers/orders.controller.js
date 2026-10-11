@@ -5,11 +5,12 @@ import Product   from '../models/product.model.js';
 import Offer     from '../models/offer.model.js';
 import User      from '../models/user.model.js';
 import StoreSettings from '../models/storeSettings.model.js';
+import Staff from '../models/staff.model.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { APIResponse }  from '../utils/api-response.js';
 import { APIError }     from '../utils/api-error.js';
 import { sendFCM }      from '../utils/send-fcm.js';
-import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated, emitOrderCancelled } from '../socket/socket.js';
+import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated, emitOrderCancelled, emitRiderAssigned } from '../socket/socket.js';
 import { calculateDistanceKm, calculateDeliveryCharge } from '../utils/delivery.js';
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
@@ -297,6 +298,7 @@ const confirmOrder = asyncHandler(async (req, res) => {
       phone        : deliveryPhone,
       ...(parsedLocation ? { location: parsedLocation } : {}),
       googleMapsUrl,
+      riderTrackingToken: crypto.randomBytes(16).toString('hex'),
     },
     pricing : { subtotal, discountAmount: discount, deliveryCharge, packagingFee, codCharge, total },
     payment : {
@@ -559,6 +561,10 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
   if (!status) throw new APIError(400, 'status is required');
 
+  if (['out_for_delivery', 'delivered'].includes(status)) {
+    throw new APIError(400, 'Orders cannot be marked Out for Delivery or Delivered from Admin. The assigned rider must initiate delivery and verify the customer OTP.');
+  }
+
   const order = await Order.findById(req.params.id).populate('customer', 'fcmToken pushToken name phone');
   if (!order) throw new APIError(404, 'Order not found');
 
@@ -654,16 +660,199 @@ const getMonthlyReport = asyncHandler(async (req, res) => {
 // ─── GET /api/orders/rider-track/:id ──────────────────────────────────────────
 const getRiderOrderDetails = asyncHandler(async (req, res) => {
   const clientToken = req.query?.token || req.headers['x-rider-token'] || req.body?.token;
-  const order = await Order.findById(req.params.id)
-    .select('orderNumber status delivery customer createdAt')
+  const orderDoc = await Order.findById(req.params.id)
     .populate('customer', 'name phone');
 
-  if (!order) throw new APIError(404, 'Order not found');
-  if (order.delivery?.riderTrackingToken && clientToken !== order.delivery.riderTrackingToken) {
+  if (!orderDoc) throw new APIError(404, 'Order not found');
+  if (orderDoc.delivery?.riderTrackingToken && clientToken && clientToken !== orderDoc.delivery.riderTrackingToken) {
     throw new APIError(403, 'Invalid or missing rider tracking token');
   }
 
-  return res.status(200).json(new APIResponse(200, order, 'Rider order details fetched'));
+  const order = orderDoc.toObject();
+  // Never expose delivery OTP to rider screen
+  delete order.deliveryOtp;
+
+  // Auto seed default staff if none exist yet, then fetch active staff
+  let activeStaff = await Staff.find({ isActive: true }).select('name phone role').lean();
+  if (!activeStaff || activeStaff.length === 0) {
+    const totalStaffCount = await Staff.countDocuments();
+    if (totalStaffCount === 0) {
+      await Staff.insertMany([
+        { name: 'Ramesh', phone: '9876543210', role: 'rider', isActive: true },
+        { name: 'Suresh', phone: '9876543211', role: 'rider', isActive: true },
+      ]);
+      activeStaff = await Staff.find({ isActive: true }).select('name phone role').lean();
+    }
+  }
+
+  return res.status(200).json(new APIResponse(200, {
+    order,
+    activeStaff,
+  }, 'Rider order details fetched'));
+});
+
+// ─── POST /api/orders/rider-track/:id/start ──────────────────────────────────
+const startRiderDelivery = asyncHandler(async (req, res) => {
+  const { token, staffId, name, phone } = req.body;
+  const clientToken = token || req.query?.token || req.headers['x-rider-token'];
+
+  const order = await Order.findById(req.params.id).populate('customer', 'fcmToken pushToken name phone');
+  if (!order) throw new APIError(404, 'Order not found');
+
+  if (order.delivery?.riderTrackingToken && clientToken && clientToken !== order.delivery.riderTrackingToken) {
+    throw new APIError(403, 'Invalid or missing rider tracking token');
+  }
+
+  if (order.status === 'cancelled') {
+    throw new APIError(400, 'Order has already been cancelled');
+  }
+  if (order.status === 'delivered') {
+    throw new APIError(400, 'Order has already been delivered');
+  }
+
+  // Generate 4-digit OTP if not already generated
+  if (order.status !== 'out_for_delivery') {
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    order.deliveryOtp = otp;
+    order.deliveryOtpVerified = false;
+    order.status = 'out_for_delivery';
+  }
+
+  const staffName = name || 'Store Staff';
+  const staffPhone = phone || '';
+
+  order.deliveryStaff = {
+    staffId: staffId || null,
+    name: staffName,
+    phone: staffPhone,
+    assignedAt: new Date(),
+  };
+
+  if (!order.delivery) order.delivery = {};
+  order.delivery.riderName = staffName;
+  order.delivery.riderPhone = staffPhone;
+
+  await order.save();
+
+  emitStatusUpdate(order._id.toString(), 'out_for_delivery');
+  emitRiderAssigned(order._id.toString(), order.deliveryStaff);
+
+  // Send push notification to Customer with OTP
+  try {
+    let customerDoc = order.customer;
+    if (!customerDoc?.fcmToken && !customerDoc?.pushToken) {
+      const customerId = order.customer?._id || order.customer;
+      if (customerId) {
+        customerDoc = await User.findById(customerId).select('fcmToken pushToken').lean();
+      }
+    }
+    const tokens = new Set();
+    if (customerDoc?.fcmToken) tokens.add(customerDoc.fcmToken);
+    if (customerDoc?.pushToken) tokens.add(customerDoc.pushToken);
+
+    for (const tok of tokens) {
+      sendFCM(
+        tok,
+        '🛵 Order Out for Delivery!',
+        `${staffName} is on the way with your ice cream! Share Delivery OTP ${order.deliveryOtp} upon arrival.`,
+        {
+          type: 'order_update',
+          orderId: order._id.toString(),
+          status: 'out_for_delivery',
+          otp: order.deliveryOtp,
+          orderNumber: order.orderNumber || '',
+          riderName: staffName,
+          riderPhone: staffPhone,
+        }
+      ).catch((err) => console.warn('[Rider Start FCM Warning]', err.message));
+    }
+  } catch (err) {
+    console.warn('[Rider Start Notification Error]', err.message);
+  }
+
+  return res.status(200).json(
+    new APIResponse(200, {
+      status: order.status,
+      deliveryStaff: order.deliveryStaff,
+      updatedAt: order.updatedAt,
+    }, 'Order picked up and marked out for delivery')
+  );
+});
+
+// ─── POST /api/orders/rider-track/:id/verify-otp ─────────────────────────────
+const verifyRiderDeliveryOtp = asyncHandler(async (req, res) => {
+  const { token, otp } = req.body;
+  const clientToken = token || req.query?.token || req.headers['x-rider-token'];
+
+  const order = await Order.findById(req.params.id).populate('customer', 'fcmToken pushToken name phone');
+  if (!order) throw new APIError(404, 'Order not found');
+
+  if (order.delivery?.riderTrackingToken && clientToken && clientToken !== order.delivery.riderTrackingToken) {
+    throw new APIError(403, 'Invalid or missing rider tracking token');
+  }
+
+  if (order.status === 'delivered') {
+    return res.status(200).json(new APIResponse(200, { status: 'delivered' }, 'Order is already delivered'));
+  }
+
+  if (order.status !== 'out_for_delivery') {
+    throw new APIError(400, `Order is not out for delivery (current status: ${order.status})`);
+  }
+
+  if (!otp || String(otp).trim() !== String(order.deliveryOtp).trim()) {
+    throw new APIError(400, 'Invalid Delivery OTP. Please ask the customer for their 4-digit OTP.');
+  }
+
+  order.deliveryOtpVerified = true;
+  order.status = 'delivered';
+
+  // If COD, mark payment as paid
+  if (order.payment?.method === 'cod') {
+    order.payment.status = 'paid';
+    order.payment.paidAt = new Date();
+  }
+
+  await order.save();
+
+  emitStatusUpdate(order._id.toString(), 'delivered');
+
+  // Push notification to Customer
+  try {
+    let customerDoc = order.customer;
+    if (!customerDoc?.fcmToken && !customerDoc?.pushToken) {
+      const customerId = order.customer?._id || order.customer;
+      if (customerId) {
+        customerDoc = await User.findById(customerId).select('fcmToken pushToken').lean();
+      }
+    }
+    const tokens = new Set();
+    if (customerDoc?.fcmToken) tokens.add(customerDoc.fcmToken);
+    if (customerDoc?.pushToken) tokens.add(customerDoc.pushToken);
+
+    for (const tok of tokens) {
+      sendFCM(
+        tok,
+        '🍨 Order Delivered!',
+        'Your Apsara Ice Cream order has been delivered! Enjoy your treat.',
+        {
+          type: 'order_update',
+          orderId: order._id.toString(),
+          status: 'delivered',
+          orderNumber: order.orderNumber || '',
+        }
+      ).catch((err) => console.warn('[Rider Delivered FCM Warning]', err.message));
+    }
+  } catch (err) {
+    console.warn('[Rider Delivered Notification Error]', err.message);
+  }
+
+  return res.status(200).json(
+    new APIResponse(200, {
+      status: 'delivered',
+      deliveryOtpVerified: true,
+      updatedAt: order.updatedAt,
+    }, 'Order delivered successfully')
+  );
 });
 
 // ─── POST /api/orders/rider-track/:id/location ────────────────────────────────
@@ -675,7 +864,7 @@ const updateRiderLocation = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
   if (!order) throw new APIError(404, 'Order not found');
 
-  if (order.delivery?.riderTrackingToken && clientToken !== order.delivery.riderTrackingToken) {
+  if (order.delivery?.riderTrackingToken && clientToken && clientToken !== order.delivery.riderTrackingToken) {
     throw new APIError(403, 'Invalid or missing rider tracking token');
   }
 
@@ -702,5 +891,5 @@ const updateRiderLocation = asyncHandler(async (req, res) => {
 export {
   initiateOrder, confirmOrder, getMyOrders, getOrderDetails,
   cancelOrder, getAdminOrders, getAdminOrderDetails, updateOrderStatus, getMonthlyReport,
-  getRiderOrderDetails, updateRiderLocation,
+  getRiderOrderDetails, updateRiderLocation, startRiderDelivery, verifyRiderDeliveryOtp,
 };

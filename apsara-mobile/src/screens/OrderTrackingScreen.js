@@ -106,7 +106,7 @@ export default function OrderTrackingScreen() {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const canCancel = cancelRemainingSec > 0 && currentStatus === 'placed';
-  const effectiveCollapsed = SNAP_COLLAPSED;
+  const effectiveCollapsed = (currentStatus === 'out_for_delivery' && order?.deliveryOtp) ? 245 : SNAP_COLLAPSED;
 
   const mapRef = useRef(null);
   const sheetHeight = useRef(new Animated.Value(effectiveCollapsed)).current;
@@ -228,6 +228,7 @@ export default function OrderTrackingScreen() {
       if (statusVal) {
         setCurrentStatus(statusVal);
         setOrder((prev) => (prev ? { ...prev, status: statusVal, orderStatus: statusVal } : prev));
+        loadOrderDetails();
         if (updateActiveOrderStatus) {
           updateActiveOrderStatus(resolvedOrderId, statusVal);
         }
@@ -381,7 +382,8 @@ export default function OrderTrackingScreen() {
         ].filter(Boolean).join(', ')
     : 'Customer Delivery Address on Record';
 
-  const partnerPhone = order?.delivery?.riderPhone || order?.delivery?.riderContact || order?.delivery?.phone || '';
+  const partnerPhone = order?.deliveryStaff?.phone || order?.delivery?.riderPhone || order?.delivery?.riderContact || order?.delivery?.phone || '';
+  const partnerName = order?.deliveryStaff?.name || order?.delivery?.riderName || 'Apsara Express Partner';
   const handleCallPartner = () => {
     if (partnerPhone) {
       Linking.openURL(`tel:${partnerPhone}`).catch(() => {});
@@ -509,33 +511,57 @@ export default function OrderTrackingScreen() {
               </View>
             </View>
           ) : (
-            <View style={styles.riderPartnerCard}>
-              <View style={styles.riderAvatarContainer}>
-                <Ionicons name="bicycle" size={20} color={colors.primary} />
-                <View style={styles.avatarVerifiedBadge}>
-                  <Ionicons name="checkmark" size={9} color={colors.white} />
-                </View>
-              </View>
-
-              <View style={styles.riderDetails}>
-                <View style={styles.riderNameRow}>
-                  <Text style={styles.riderName}>Apsara Express Partner</Text>
-                  <View style={styles.ratingBadge}>
-                    <Ionicons name="star" size={10} color="#F59E0B" />
-                    <Text style={styles.ratingText}>4.9</Text>
+            <>
+              <View style={styles.riderPartnerCard}>
+                <View style={styles.riderAvatarContainer}>
+                  <Ionicons name="bicycle" size={20} color={colors.primary} />
+                  <View style={styles.avatarVerifiedBadge}>
+                    <Ionicons name="checkmark" size={9} color={colors.white} />
                   </View>
                 </View>
-                <Text style={styles.riderSubtext}>Electric Scooter • -18°C Insulated Pack</Text>
+
+                <View style={styles.riderDetails}>
+                  <View style={styles.riderNameRow}>
+                    <Text style={styles.riderName}>{partnerName}</Text>
+                    <View style={styles.ratingBadge}>
+                      <Ionicons name="star" size={10} color="#F59E0B" />
+                      <Text style={styles.ratingText}>4.9</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.riderSubtext}>
+                    {order?.deliveryStaff?.name ? `Store Rider • +91 ${partnerPhone}` : 'Electric Scooter • -18°C Insulated Pack'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleCallPartner}
+                  style={[styles.callPartnerBtn, !partnerPhone && { opacity: 0.5 }]}
+                  activeOpacity={0.8}
+                  disabled={!partnerPhone}
+                >
+                  <Ionicons name="call" size={16} color={colors.white} />
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                onPress={handleCallPartner}
-                style={styles.callPartnerBtn}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="call" size={16} color={colors.white} />
-              </TouchableOpacity>
-            </View>
+              {currentStatus === 'out_for_delivery' && order?.deliveryOtp && (
+                <View style={styles.deliveryOtpCard}>
+                  <View style={styles.otpHeaderRow}>
+                    <View style={styles.otpBadge}>
+                      <Ionicons name="shield-checkmark" size={13} color="#166534" />
+                      <Text style={styles.otpBadgeText}>DELIVERY OTP</Text>
+                    </View>
+                    <Text style={styles.otpHintText}>Share with rider at doorstep</Text>
+                  </View>
+                  <View style={styles.otpDigitsContainer}>
+                    {order.deliveryOtp.split('').map((digit, index) => (
+                      <View key={index} style={styles.otpDigitBox}>
+                        <Text style={styles.otpDigitText}>{digit}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </>
           )}
 
           {!isExpanded && (
@@ -1385,5 +1411,73 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     marginTop: 2,
     lineHeight: 15,
+  },
+  deliveryOtpCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    alignItems: 'center',
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  otpHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  otpBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  otpBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#166534',
+    letterSpacing: 0.5,
+  },
+  otpHintText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#15803D',
+  },
+  otpDigitsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  otpDigitBox: {
+    width: 38,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  otpDigitText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#14532D',
+    fontFamily: 'monospace',
   },
 });

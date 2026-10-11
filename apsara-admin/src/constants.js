@@ -7,6 +7,7 @@ export const ORDERS_URL      = '/orders';
 export const OFFERS_URL      = '/offers';
 export const AUTH_URL        = '/auth';
 export const ADMIN_URL       = '/admin';
+export const STAFF_URL       = '/staff';
   
 export const STATUS_LABELS = {
   placed          : 'Order Placed',
@@ -18,8 +19,8 @@ export const STATUS_LABELS = {
  
 export const STATUS_TRANSITIONS = {
   placed          : ['preparing', 'cancelled'],
-  preparing       : ['out_for_delivery'],
-  out_for_delivery: ['delivered'],
+  preparing       : ['cancelled'],
+  out_for_delivery: [],
   delivered       : [],
   cancelled       : [],
 };
@@ -29,6 +30,7 @@ export const NAV_LINKS = [
   { label: 'Products',   path: '/products'   },
   { label: 'Categories', path: '/categories' },
   { label: 'Offers',     path: '/offers'     },
+  { label: 'Staff',      path: '/staff'      },
   { label: 'Broadcast',  path: '/broadcast'  },
   { label: 'Reports',    path: '/reports'    },
 ];

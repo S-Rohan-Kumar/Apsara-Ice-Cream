@@ -117,3 +117,12 @@ export const emitRiderLocationUpdated = (orderId, locationData) => {
         io.emit("rider_location_updated", payload);
     }
 }
+
+export const emitRiderAssigned = (orderId, riderData) => {
+    if (io) {
+        const idStr = orderId?.toString?.() || orderId;
+        const payload = { ...(riderData || {}), orderId: idStr };
+        io.to(`order_${idStr}`).emit("rider_assigned", payload);
+        io.emit("rider_assigned", payload);
+    }
+}

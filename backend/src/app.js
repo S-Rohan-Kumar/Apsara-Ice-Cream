@@ -46,6 +46,7 @@ import offerRoute from "./routes/offers.routes.js"
 import orderRoute from "./routes/order.routes.js"
 import adminRoute from "./routes/admin.routes.js"
 import notificationRoute from "./routes/notification.routes.js"
+import staffRoute from "./routes/staff.routes.js"
 
 
 //All routes 
@@ -56,6 +57,7 @@ app.use('/api/offers', offerRoute)
 app.use('/api/orders', orderRoute);
 app.use('/api/admin',  adminRoute);
 app.use('/api/notifications', notificationRoute);
+app.use('/api/staff',  staffRoute);
 
 
 app.use(errorHandler)
