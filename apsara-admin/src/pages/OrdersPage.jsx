@@ -5,8 +5,10 @@ import { selectUserInfo } from '../slices/authSlice';
 import {
   useGetAdminOrdersQuery,
   useUpdateOrderStatusMutation,
+  useAssignRiderToOrderMutation,
 } from '../slices/orderApiSlice';
 import { clearOrders, addOrderAlert } from '../slices/socketSlice';
+import { useGetActiveStaffQuery } from '../slices/staffApiSlice';
 import { useToast } from '../hooks/useToast';
 import { getDeliveryBoyMessage } from '../utils/deliveryMessage';
 import { playOrderChime } from '../utils/sound';
@@ -34,7 +36,9 @@ export function OrdersPage() {
   const { showSuccess, showError } = useToast();
 
   const [updateOrderStatus] = useUpdateOrderStatusMutation();
+  const [assignRiderToOrder] = useAssignRiderToOrderMutation();
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [assigningOrderId, setAssigningOrderId] = useState(null);
 
   const knownOrdersRef = useRef(new Set());
   const initialLoadRef = useRef(true);
@@ -49,6 +53,20 @@ export function OrdersPage() {
   );
 
   const rawOrders = useMemo(() => data?.orders || [], [data]);
+
+  const { data: activeStaffList = [] } = useGetActiveStaffQuery(undefined, { pollingInterval: 10000 });
+
+  // Looping chime alert every 12s if orders are waiting in 'placed' status
+  useEffect(() => {
+    const hasUnaccepted = rawOrders.some((o) => o.status === 'placed');
+    if (!hasUnaccepted) return;
+
+    const interval = setInterval(() => {
+      playOrderChime();
+    }, 12000);
+
+    return () => clearInterval(interval);
+  }, [rawOrders]);
 
   useEffect(() => {
     if (rawOrders.length === 0) return;
@@ -88,22 +106,17 @@ export function OrdersPage() {
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter((ord) => {
-        const num = (ord.orderNumber || '').toLowerCase();
-        const id = (ord._id || '').toLowerCase();
-        const name = (ord.customer?.name || '').toLowerCase();
-        const phone = (ord.customer?.phone || '').toLowerCase();
-        const address = (ord.delivery?.address || '').toLowerCase();
-        const hasItem = (ord.items || []).some((it) =>
+      const q = searchQuery.toLowerCase();
+      list = list.filter((o) => {
+        const orderNum = (o.orderNumber || '').toLowerCase();
+        const custName = (o.customer?.name || '').toLowerCase();
+        const hasItem = (o.items || []).some((it) =>
           (it.productName || '').toLowerCase().includes(q)
         );
         return (
-          num.includes(q) ||
-          id.includes(q) ||
-          name.includes(q) ||
-          phone.includes(q) ||
-          address.includes(q) ||
+          orderNum.includes(q) ||
+          custName.includes(q) ||
+          o._id.includes(q) ||
           hasItem
         );
       });
@@ -134,6 +147,23 @@ export function OrdersPage() {
     }
   };
 
+  const handleAssignRider = async (orderId, staff) => {
+    try {
+      setAssigningOrderId(orderId);
+      await assignRiderToOrder({
+        id: orderId,
+        staffId: staff._id,
+        name: staff.name,
+        phone: staff.phone,
+      }).unwrap();
+      showSuccess(`🛵 Assigned rider ${staff.name} to order!`);
+    } catch (err) {
+      showError(err?.data?.message || 'Failed to assign rider');
+    } finally {
+      setAssigningOrderId(null);
+    }
+  };
+
   const handleCopyDeliveryInfo = (order) => {
     const text = getDeliveryBoyMessage(order, isBiller);
     navigator.clipboard.writeText(text);
@@ -142,7 +172,9 @@ export function OrdersPage() {
 
   const handleShareWhatsApp = (order) => {
     const text = getDeliveryBoyMessage(order, isBiller);
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    const phone = (order.deliveryStaff?.phone || order.delivery?.riderPhone || '').replace(/[^0-9]/g, '');
+    const phoneParam = phone ? `phone=91${phone.slice(-10)}&` : '';
+    const url = `https://api.whatsapp.com/send?${phoneParam}text=${encodeURIComponent(text)}`;
     const link = document.createElement('a');
     link.href = url;
     link.target = '_blank';
@@ -155,10 +187,24 @@ export function OrdersPage() {
   return (
     <div className='max-w-7xl mx-auto pb-24 space-y-6'>
       <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
-        <div className='flex-1 max-w-xl'>
+        <div>
+          <div className='flex items-center gap-2 mb-1.5'>
+            <span className='px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800'>
+              Store Order Desk
+            </span>
+            <span className='text-xs font-semibold text-gray-500'>
+              Live Kitchen & Dispatch Portal
+            </span>
+          </div>
+          <h1 className='text-2xl sm:text-3xl font-black text-[#1B4332] tracking-tight'>
+            Active Orders
+          </h1>
+        </div>
+
+        <div className='w-full md:w-96'>
           <div className='relative'>
-            <span className='absolute left-4 top-1/2 -translate-y-1/2 text-gray-400'>
-              <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+            <span className='absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400'>
+              <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
                 <circle cx='11' cy='11' r='8'></circle>
                 <line x1='21' y1='21' x2='16.65' y2='16.65'></line>
               </svg>
@@ -244,30 +290,15 @@ export function OrdersPage() {
           {filteredOrders.map((order) => {
             const orderNum = order.orderNumber || `#${order._id.slice(-4).toUpperCase()}`;
             const cleanPhone = (order.customer?.phone || order.delivery?.phone || '').replace(/[^0-9]/g, '');
-
-            let actionLabel = 'Order ready';
-            let nextStatus = 'out_for_delivery';
-            let btnClass = 'bg-[#1B4332] hover:bg-[#163829] text-white';
-
-            if (order.status === 'placed') {
-              actionLabel = 'Accept Order';
-              nextStatus = 'preparing';
-              btnClass = 'bg-[#1B4332] hover:bg-[#163829] text-white';
-            } else if (order.status === 'preparing') {
-              actionLabel = 'Order ready (Rollout to Rider)';
-              nextStatus = 'out_for_delivery';
-              btnClass = 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white';
-            } else if (order.status === 'out_for_delivery') {
-              actionLabel = 'Mark Delivered';
-              nextStatus = 'delivered';
-              btnClass = 'bg-[#15803D] hover:bg-[#166534] text-white';
-            }
+            const assignedRider = order.deliveryStaff?.name || order.delivery?.riderName || null;
+            const assignedPhone = order.deliveryStaff?.phone || order.delivery?.riderPhone || null;
 
             return (
               <div
                 key={order._id}
                 className='bg-white rounded-2xl border border-gray-200 shadow-xs hover:shadow-md transition-shadow p-5 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch'
               >
+                {/* Column 1: Order Metadata & Customer */}
                 <div className='lg:col-span-3 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-gray-100 pb-4 lg:pb-0 lg:pr-6'>
                   <div>
                     <div className='mb-2'>
@@ -331,6 +362,7 @@ export function OrdersPage() {
                   </div>
                 </div>
 
+                {/* Column 2: Items, Total & Main Order Actions */}
                 <div className='lg:col-span-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-gray-100 pb-4 lg:pb-0 lg:pr-6'>
                   <div className='space-y-2 mb-4'>
                     {(order.items || []).map((it, idx) => (
@@ -440,10 +472,12 @@ export function OrdersPage() {
                           <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
                             <path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'></path>
                           </svg>
-                          <span>📲 Share with Rider (WhatsApp)</span>
+                          <span>
+                            {assignedRider ? `📲 Send Token to ${assignedRider} (WhatsApp)` : '📲 Share with Rider (WhatsApp)'}
+                          </span>
                         </button>
                         <p className='text-[10px] text-center font-bold text-amber-800 bg-amber-50 py-1.5 px-2 rounded-lg border border-amber-200'>
-                          Rider must tap link on phone to pick up & start GPS
+                          Rider taps link on phone to pick up & start GPS
                         </p>
                       </div>
                     )}
@@ -452,7 +486,7 @@ export function OrdersPage() {
                       <div className='w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border border-blue-200 bg-blue-50 text-blue-800 flex flex-col gap-1'>
                         <div className='flex items-center justify-center gap-1.5'>
                           <span className='w-2 h-2 rounded-full bg-blue-500 animate-pulse'></span>
-                          <span>Out for Delivery • {order.deliveryStaff?.name || order.delivery?.riderName || 'Rider'}</span>
+                          <span>Out for Delivery • {assignedRider || 'Rider'}</span>
                         </div>
                         <span className='text-[10px] text-blue-600 font-medium'>
                           Awaiting OTP verification at customer doorstep
@@ -463,8 +497,8 @@ export function OrdersPage() {
                     {order.status === 'delivered' && (
                       <div className='w-full py-2.5 px-3 text-center text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 flex items-center justify-center gap-1.5'>
                         <span>✓ Completed & Delivered</span>
-                        {order.deliveryStaff?.name && (
-                          <span className='text-[10px] text-emerald-600 font-semibold'>({order.deliveryStaff.name})</span>
+                        {assignedRider && (
+                          <span className='text-[10px] text-emerald-600 font-semibold'>({assignedRider})</span>
                         )}
                       </div>
                     )}
@@ -477,12 +511,75 @@ export function OrdersPage() {
                   </div>
                 </div>
 
+                {/* Column 3: Delivery Address & Rider Assignment (Biller & Admin) */}
                 <div className='lg:col-span-4 flex flex-col justify-between space-y-3'>
-                  <div>
-                    <p className='text-[11px] font-bold text-gray-400 mb-1'>Delivery address</p>
-                    <p className='text-xs font-bold text-slate-800 leading-relaxed break-words'>
-                      {order.delivery?.address || 'Pickup at store'}
-                    </p>
+                  <div className='space-y-3'>
+                    <div>
+                      <p className='text-[11px] font-bold text-gray-400 mb-1'>Delivery address</p>
+                      <p className='text-xs font-bold text-slate-800 leading-relaxed break-words'>
+                        {order.delivery?.address || 'Pickup at store'}
+                      </p>
+                    </div>
+
+                    {/* Rider Assignment Module for Biller & Admin */}
+                    <div className='p-2.5 rounded-xl border border-gray-200 bg-gray-50 space-y-2'>
+                      <div className='flex items-center justify-between'>
+                        <span className='text-[10px] font-black uppercase tracking-wider text-gray-500 flex items-center gap-1.5'>
+                          <span>🛵</span>
+                          <span>Assigned Rider</span>
+                        </span>
+                        {assignedRider ? (
+                          <span className='text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800'>
+                            Assigned
+                          </span>
+                        ) : (
+                          <span className='text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800'>
+                            Needs Rider
+                          </span>
+                        )}
+                      </div>
+
+                      {assignedRider ? (
+                        <div className='flex items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-emerald-200'>
+                          <div className='min-w-0'>
+                            <p className='text-xs font-black text-slate-800 truncate'>
+                              {assignedRider}
+                            </p>
+                            <p className='text-[10px] text-gray-400 font-mono'>
+                              {assignedPhone ? `+91 ${assignedPhone}` : 'No phone registered'}
+                            </p>
+                          </div>
+                          <span className='text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 shrink-0 border border-emerald-200'>
+                            ✓ Assigned
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          {['placed', 'preparing'].includes(order.status) ? (
+                            <select
+                              onChange={(e) => {
+                                const st = activeStaffList.find((s) => s._id === e.target.value);
+                                if (st) handleAssignRider(order._id, st);
+                              }}
+                              defaultValue=''
+                              disabled={assigningOrderId === order._id}
+                              className='w-full text-xs font-bold bg-white text-slate-800 rounded-lg px-2.5 py-1.5 border border-emerald-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer'
+                            >
+                              <option value='' disabled>
+                                ⚡ Assign Available Rider...
+                              </option>
+                              {activeStaffList.map((st) => (
+                                <option key={st._id} value={st._id}>
+                                  {st.name} — {st.isOnDelivery ? '🟡 On Bike' : '🟢 Ready / Available'}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <p className='text-[11px] text-gray-400 italic'>No rider assigned</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className='pt-2 border-t border-gray-100 flex items-center justify-between gap-2'>
@@ -512,17 +609,6 @@ export function OrdersPage() {
                           </svg>
                         </a>
                       )}
-
-                      <button
-                        onClick={() => handleShareWhatsApp(order)}
-                        title='Send delivery boy details via WhatsApp'
-                        className='p-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition font-bold text-xs flex items-center gap-1'
-                      >
-                        <svg className='w-4 h-4 text-emerald-600' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                          <path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'></path>
-                        </svg>
-                        <span className='hidden sm:inline'>WhatsApp</span>
-                      </button>
                     </div>
 
                     <Link

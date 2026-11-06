@@ -4,8 +4,10 @@ import { Platform } from 'react-native';
 const getSocketUrl = () => {
   if (Platform.OS === 'web') {
     return 'https://apsara-ice-cream-cj1s.onrender.com';
+    // return 'http://172.25.240.1:8000';
   }
   return 'https://apsara-ice-cream-cj1s.onrender.com';
+  // return 'http://172.25.240.1:8000';
 };
 
 const socket = io(getSocketUrl(), {

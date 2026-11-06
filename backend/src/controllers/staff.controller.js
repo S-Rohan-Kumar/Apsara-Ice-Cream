@@ -28,12 +28,16 @@ export const getAllStaff = asyncHandler(async (req, res) => {
 });
 
 export const getActiveStaff = asyncHandler(async (req, res) => {
-  let activeList = await Staff.find({ isActive: true }).select('name phone role isActive').sort({ name: 1 });
+  let activeList = await Staff.find({ isActive: true })
+    .select('name phone role isActive isOnDelivery lastDeliveredAt')
+    .sort({ isOnDelivery: 1, lastDeliveredAt: 1, name: 1 });
 
   if (activeList.length === 0) {
     try {
       await Staff.insertMany(DEFAULT_STAFF);
-      activeList = await Staff.find({ isActive: true }).select('name phone role isActive').sort({ name: 1 });
+      activeList = await Staff.find({ isActive: true })
+        .select('name phone role isActive isOnDelivery lastDeliveredAt')
+        .sort({ isOnDelivery: 1, lastDeliveredAt: 1, name: 1 });
     } catch {}
   }
 
@@ -71,7 +75,7 @@ export const updateStaff = asyncHandler(async (req, res) => {
     throw new APIError(404, 'Employee not found');
   }
 
-  const allowedFields = ['name', 'phone', 'role', 'isActive'];
+  const allowedFields = ['name', 'phone', 'role', 'isActive', 'isOnDelivery', 'lastDeliveredAt'];
   allowedFields.forEach((field) => {
     if (req.body[field] !== undefined) {
       staff[field] = req.body[field];

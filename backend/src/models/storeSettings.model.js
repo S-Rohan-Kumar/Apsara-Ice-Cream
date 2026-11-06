@@ -9,9 +9,9 @@ const storeSettingsSchema = new Schema(
     freeDeliveryThreshold: { type: Number, default: 599, min: 0 },
     maxDeliveryRadiusKm: { type: Number, default: 5 },
     storeLocation: {
-      lat: { type: Number, default: 13.0033 },
-      lng: { type: Number, default: 77.6834 },
-      address: { type: String, default: 'Apsara KR Puram Store' },
+      lat: { type: Number, default: 12.5237 },
+      lng: { type: Number, default: 76.8946 },
+      address: { type: String, default: 'Apsara Mandya Store, Mandya Central' },
     },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },

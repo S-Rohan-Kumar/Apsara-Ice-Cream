@@ -37,6 +37,21 @@ export const orderApiSlice = apiSlice.injectEndpoints({
       ],
     }),
 
+    // PATCH /api/orders/:id/assign-rider
+    assignRiderToOrder: builder.mutation({
+      query: ({ id, staffId, name, phone }) => ({
+        url: `${ORDERS_URL}/${id}/assign-rider`,
+        method: "PATCH",
+        body: { staffId, name, phone },
+      }),
+      transformResponse: (res) => res.data,
+      invalidatesTags: (result, error, { id }) => [
+        "Order",
+        { type: "Order", id },
+        "Staff",
+      ],
+    }),
+
     // GET /api/admin/reports/monthly?from=&to=
     getMonthlyReport: builder.query({
       query: ({ from, to }) => ({
@@ -54,5 +69,6 @@ export const {
   useGetAdminOrdersQuery,
   useGetAdminOrderByIdQuery,
   useUpdateOrderStatusMutation,
+  useAssignRiderToOrderMutation,
   useGetMonthlyReportQuery,
 } = orderApiSlice;

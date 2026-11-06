@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { BASE_URL, SOCKET_URL } from '../constants';
 
 const currency = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -9,6 +11,8 @@ export default function RiderTrackPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
+  const urlRiderId = searchParams.get('riderId') || '';
+  const urlRiderName = searchParams.get('rider') || searchParams.get('riderName') || '';
 
   const [order, setOrder] = useState(null);
   const [activeStaffList, setActiveStaffList] = useState([]);
@@ -20,6 +24,7 @@ export default function RiderTrackPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [watchId, setWatchId] = useState(null);
   const [lastUpdateText, setLastUpdateText] = useState('GPS Standby');
+  const [currentCoords, setCurrentCoords] = useState(null);
 
   // OTP delivery state
   const [otpInput, setOtpInput] = useState('');
@@ -29,22 +34,83 @@ export default function RiderTrackPage() {
   const [deliverySuccess, setDeliverySuccess] = useState(false);
 
   const socketRef = useRef(null);
+  const wakeLockRef = useRef(null);
+
+  // Request screen wake lock so phone display stays on while riding
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      } catch (_) {}
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  // Force an immediate GPS read and transmission
+  const syncGpsImmediate = useCallback(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, heading } = pos.coords;
+        setCurrentCoords({ lat: latitude, lng: longitude });
+        setLastUpdateText(`Live GPS • ${new Date().toLocaleTimeString('en-IN')}`);
+
+        if (socketRef.current && socketRef.current.connected) {
+          socketRef.current.emit('rider_location', {
+            orderId: id,
+            lat: latitude,
+            lng: longitude,
+            heading: heading || 0,
+          });
+        }
+
+        fetch(`${BASE_URL}/orders/rider-track/${id}/location?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: latitude,
+            lng: longitude,
+            heading: heading || 0,
+            token,
+          }),
+        }).catch(() => {});
+      },
+      (err) => {
+        setLastUpdateText(`GPS signal: ${err.message}`);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 6000,
+        maximumAge: 0,
+      }
+    );
+  }, [id, token]);
 
   useEffect(() => {
     fetchOrderDetails();
 
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 20,
+      reconnectionAttempts: 30,
     });
     socketRef.current = socket;
 
-    socket.emit('join_order', id);
+    socket.on('connect', () => {
+      socket.emit('join_order', id);
+    });
 
     socket.on('status_update', (newStatus) => {
       setOrder((prev) => (prev ? { ...prev, status: newStatus } : prev));
       if (newStatus === 'delivered' || newStatus === 'cancelled') {
         stopSharing();
+        releaseWakeLock();
       }
     });
 
@@ -53,14 +119,42 @@ export default function RiderTrackPage() {
         socket.emit('leave_order', id);
         socket.disconnect();
       }
+      releaseWakeLock();
     };
-  }, [id]);
+  }, [id, releaseWakeLock]);
+
+  // Handle mobile visibility change (re-focus from Google Maps or screen wake)
+  useEffect(() => {
+    if (order?.status !== 'out_for_delivery' && !isSharing) {
+      releaseWakeLock();
+      return;
+    }
+
+    requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+        syncGpsImmediate();
+        if (socketRef.current && !socketRef.current.connected) {
+          socketRef.current.connect();
+          socketRef.current.emit('join_order', id);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      releaseWakeLock();
+    };
+  }, [id, order?.status, isSharing, requestWakeLock, releaseWakeLock, syncGpsImmediate]);
 
   const fetchOrderDetails = async () => {
     try {
       setLoading(true);
       setError('');
-      const res = await fetch(`${BASE_URL}/orders/rider-track/${id}?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`${BASE_URL}/orders/rider-track/${id}?token=${encodeURIComponent(token)}${urlRiderId ? `&riderId=${encodeURIComponent(urlRiderId)}` : ''}`);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || 'Failed to load order');
@@ -71,24 +165,44 @@ export default function RiderTrackPage() {
       setOrder(ord);
       setActiveStaffList(staffList);
 
-      // Restore saved rider from localStorage or current order assignment
-      const savedStaffId = localStorage.getItem('apsara_rider_id');
-      const assignedStaffId = ord.deliveryStaff?.staffId;
+      // Prioritize store-assigned rider or URL rider parameter
+      const assignedStaffId = ord.deliveryStaff?.staffId || urlRiderId;
+      const assignedRiderName = ord.deliveryStaff?.name || ord.delivery?.riderName || urlRiderName;
+      const assignedPhone = ord.deliveryStaff?.phone || ord.delivery?.riderPhone || '';
 
       if (assignedStaffId) {
         const matching = staffList.find((s) => s._id === assignedStaffId);
-        setSelectedStaff(matching || { _id: assignedStaffId, name: ord.deliveryStaff.name, phone: ord.deliveryStaff.phone });
-      } else if (savedStaffId) {
-        const matching = staffList.find((s) => s._id === savedStaffId);
-        if (matching) setSelectedStaff(matching);
-        else if (staffList.length > 0) setSelectedStaff(staffList[0]);
-      } else if (staffList.length > 0) {
-        setSelectedStaff(staffList[0]);
+        setSelectedStaff(
+          matching || {
+            _id: assignedStaffId,
+            name: assignedRiderName || 'Assigned Rider',
+            phone: assignedPhone || '',
+          }
+        );
+      } else if (assignedRiderName) {
+        const matching = staffList.find((s) => s.name?.toLowerCase() === assignedRiderName.toLowerCase());
+        setSelectedStaff(
+          matching || {
+            _id: null,
+            name: assignedRiderName,
+            phone: assignedPhone || '',
+          }
+        );
+      } else {
+        const savedStaffId = localStorage.getItem('apsara_rider_id');
+        if (savedStaffId) {
+          const matching = staffList.find((s) => s._id === savedStaffId);
+          if (matching) setSelectedStaff(matching);
+          else if (staffList.length > 0) setSelectedStaff(staffList[0]);
+        } else if (staffList.length > 0) {
+          setSelectedStaff(staffList[0]);
+        }
       }
 
-      // If order is already out_for_delivery and not sharing GPS, auto-start GPS if rider returns to page
+      // If order is out_for_delivery, auto-start GPS sharing and wake lock
       if (ord.status === 'out_for_delivery' && !isSharing) {
         startSharing();
+        requestWakeLock();
       }
       if (ord.status === 'delivered') {
         setDeliverySuccess(true);
@@ -113,10 +227,12 @@ export default function RiderTrackPage() {
     }
 
     setIsSharing(true);
+    requestWakeLock();
 
     const idWatch = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude, heading } = pos.coords;
+        setCurrentCoords({ lat: latitude, lng: longitude });
         setLastUpdateText(`Live GPS • ${new Date().toLocaleTimeString('en-IN')}`);
 
         if (socketRef.current && socketRef.current.connected) {
@@ -158,18 +274,20 @@ export default function RiderTrackPage() {
       setWatchId(null);
     }
     setIsSharing(false);
+    setLastUpdateText('GPS Standby');
   };
 
   const launchGoogleMapsBikeNavigation = () => {
-    const lat = order?.delivery?.location?.lat;
-    const lng = order?.delivery?.location?.lng;
-    const addr = order?.delivery?.address || '';
+    if (!order) return;
 
+    // Use lat/lng if available, else clean destination address
     let destinationQuery = '';
-    if (lat && lng) {
-      destinationQuery = `${lat},${lng}`;
-    } else if (addr) {
-      destinationQuery = encodeURIComponent(addr);
+    if (order.delivery?.location?.lat && order.delivery?.location?.lng) {
+      destinationQuery = `${order.delivery.location.lat},${order.delivery.location.lng}`;
+    } else if (order.delivery?.address) {
+      destinationQuery = encodeURIComponent(order.delivery.address);
+    } else {
+      destinationQuery = encodeURIComponent('Mandya, Karnataka');
     }
 
     // Google Maps Two-Wheeler / Bike Navigation URL
@@ -178,8 +296,14 @@ export default function RiderTrackPage() {
   };
 
   const handleStartDelivery = async () => {
-    if (!selectedStaff) {
-      alert('Please tap your name (Ramesh / Suresh) before picking up the order.');
+    const finalStaff = selectedStaff || (order?.deliveryStaff?.name ? {
+      _id: order.deliveryStaff.staffId,
+      name: order.deliveryStaff.name,
+      phone: order.deliveryStaff.phone,
+    } : null);
+
+    if (!finalStaff) {
+      alert('Rider assignment missing. Please contact store.');
       return;
     }
 
@@ -192,9 +316,9 @@ export default function RiderTrackPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          staffId: selectedStaff._id,
-          name: selectedStaff.name,
-          phone: selectedStaff.phone,
+          staffId: finalStaff._id,
+          name: finalStaff.name,
+          phone: finalStaff.phone,
         }),
       });
 
@@ -209,7 +333,7 @@ export default function RiderTrackPage() {
         deliveryStaff: data.data?.deliveryStaff,
       }));
 
-      // Automatically activate GPS
+      // Automatically activate GPS & screen wake lock
       startSharing();
 
       // Automatically launch Bike Navigation in Google Maps
@@ -227,7 +351,7 @@ export default function RiderTrackPage() {
 
     const cleanOtp = otpInput.trim();
     if (cleanOtp.length !== 4) {
-      setOtpError('Please enter the 4-digit Delivery OTP given by the customer');
+      setOtpError('Please enter the full 4-digit OTP provided by customer');
       return;
     }
 
@@ -286,94 +410,162 @@ export default function RiderTrackPage() {
 
   const isCod = order.payment?.method === 'cod';
   const orderAmount = order.pricing?.total ?? order.totalAmount ?? 0;
-  const custPhone = order.customer?.phone || order.delivery?.phone || '';
+  const custPhone = (order.customer?.phone || order.delivery?.phone || '').replace(/[^0-9]/g, '');
+  const hasCoordinates = order.delivery?.location?.lat && order.delivery?.location?.lng;
+
+  // Strict check: Is rider assigned by the store or identified in URL?
+  const isRiderLocked = Boolean(
+    order.deliveryStaff?.staffId ||
+    order.deliveryStaff?.name ||
+    order.delivery?.riderName ||
+    urlRiderId ||
+    urlRiderName
+  );
+
+  const lockedRiderName = selectedStaff?.name || order.deliveryStaff?.name || order.delivery?.riderName || urlRiderName || 'Store Staff';
+  const lockedRiderPhone = selectedStaff?.phone || order.deliveryStaff?.phone || order.delivery?.riderPhone || '';
 
   return (
-    <div className='min-h-screen bg-[#F4F7F5] text-slate-800 flex flex-col justify-between max-w-md mx-auto shadow-2xl'>
-      {/* Top Banner */}
-      <div className='bg-[#1B4332] text-white p-5 rounded-b-3xl shadow-md'>
-        <div className='flex items-center justify-between mb-3'>
-          <div className='flex items-center gap-2.5'>
+    <div className='min-h-screen bg-[#F3F4F6] text-slate-900 flex flex-col select-none pb-12'>
+      {/* Top Header */}
+      <div className='bg-[#1B4332] text-white p-4 shadow-md sticky top-0 z-30'>
+        <div className='max-w-md mx-auto flex items-center justify-between'>
+          <div className='flex items-center gap-2'>
             <span className='text-2xl'>🍨</span>
             <div>
-              <p className='text-[10px] uppercase tracking-widest text-emerald-300 font-black'>Apsara Ice Creams</p>
-              <h1 className='text-base font-black leading-tight'>Rider Delivery Portal</h1>
+              <p className='text-[10px] font-black uppercase tracking-wider text-emerald-300'>
+                Apsara Ice Creams
+              </p>
+              <h1 className='text-base font-black tracking-tight leading-none'>Rider Delivery Portal</h1>
             </div>
           </div>
-          <span className='bg-emerald-900/90 px-3 py-1 rounded-full text-xs font-mono font-black text-emerald-200 border border-emerald-700'>
-            {order.orderNumber}
-          </span>
+
+          <div className='text-right'>
+            <span className='text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-800 text-emerald-200 font-bold'>
+              {order.orderNumber || `#${order._id.slice(-4).toUpperCase()}`}
+            </span>
+          </div>
         </div>
 
-        {/* Status Pill */}
-        <div className='bg-white/10 backdrop-blur-sm rounded-2xl p-3 flex items-center justify-between'>
-          <div>
-            <p className='text-[10px] uppercase font-bold text-emerald-200 tracking-wider'>Current Status</p>
-            <p className='text-xs font-black capitalize text-white'>
-              {order.status === 'placed' && '⏳ Order Placed (Waiting Packing)'}
-              {order.status === 'preparing' && '📦 Packed & Ready for Pickup'}
-              {order.status === 'out_for_delivery' && '🛵 Out for Delivery'}
-              {order.status === 'delivered' && '✅ Delivered Successfully'}
-              {order.status === 'cancelled' && '❌ Order Cancelled'}
-            </p>
+        {/* Live GPS & Status Pill */}
+        <div className='max-w-md mx-auto mt-3 pt-2.5 border-t border-emerald-800/80 flex items-center justify-between text-xs'>
+          <div className='flex items-center gap-2'>
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isSharing ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+              }`}
+            />
+            <span className='font-bold text-[11px] text-emerald-100'>
+              {order.status === 'placed' && 'Incoming Order'}
+              {order.status === 'preparing' && 'Packed & Ready For Pickup'}
+              {order.status === 'out_for_delivery' && 'On The Way to Customer'}
+              {order.status === 'delivered' && 'Delivered Successfully'}
+              {order.status === 'cancelled' && 'Order Cancelled'}
+            </span>
           </div>
-          {isSharing ? (
-            <span className='flex items-center gap-1.5 bg-emerald-400/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-400/30'>
-              <span className='w-2 h-2 rounded-full bg-emerald-400 animate-ping' />
-              GPS ACTIVE
+
+          <div className='flex items-center gap-1.5'>
+            <span className='text-[10px] font-mono text-emerald-300 font-medium bg-emerald-900/60 px-2 py-0.5 rounded-md'>
+              {lastUpdateText}
             </span>
-          ) : (
-            <span className='bg-white/10 text-gray-300 text-[10px] font-bold px-2.5 py-1 rounded-full'>
-              GPS Standby
-            </span>
-          )}
+            {isSharing && (
+              <button
+                onClick={syncGpsImmediate}
+                className='p-1 bg-emerald-700 hover:bg-emerald-600 rounded text-[10px] text-white'
+                title='Force GPS Sync'
+              >
+                🔄
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className='p-4 flex-1 space-y-4'>
-        {/* Rider Profile Selector */}
-        <div className='bg-white rounded-2xl p-4 border border-gray-200 shadow-xs'>
-          <p className='text-[10px] uppercase font-black text-gray-400 tracking-wider mb-2'>
-            Who is delivering this order? (Select Rider)
-          </p>
-          <div className='grid grid-cols-2 gap-2'>
-            {activeStaffList.map((staff) => {
-              const isSelected = selectedStaff?._id === staff._id;
-              return (
-                <button
-                  key={staff._id}
-                  type='button'
-                  onClick={() => handleSelectStaff(staff)}
-                  className={`py-2.5 px-3 rounded-xl border text-xs font-black transition-all flex items-center justify-center gap-2 ${
-                    isSelected
-                      ? 'bg-[#1B4332] text-white border-[#1B4332] shadow-sm'
-                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  <span>{isSelected ? '✓' : '👤'}</span>
-                  <span>{staff.name}</span>
-                </button>
-              );
-            })}
-          </div>
-          {selectedStaff && (
-            <p className='text-[10px] text-gray-400 mt-2 text-center font-medium'>
-              Rider: <strong className='text-gray-700'>{selectedStaff.name}</strong> • +91 {selectedStaff.phone}
+      <div className='p-4 flex-1 space-y-4 max-w-md mx-auto w-full'>
+        {/* Rider Identification Module: Strictly Locked When Assigned (NO Reassign Option) */}
+        {isRiderLocked ? (
+          <div className='bg-white rounded-2xl p-4 border border-emerald-200 shadow-xs'>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center gap-3'>
+                <div className='w-11 h-11 rounded-2xl bg-[#1B4332] text-white flex items-center justify-center text-lg font-black shrink-0 shadow-xs'>
+                  🛵
+                </div>
+                <div>
+                  <div className='flex items-center gap-1.5'>
+                    <span className='text-[10px] uppercase font-black text-gray-400 tracking-wider'>
+                      Assigned Delivery Rider
+                    </span>
+                    <span className='w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse'></span>
+                  </div>
+                  <p className='text-sm font-black text-slate-900'>
+                    {lockedRiderName}
+                  </p>
+                  {lockedRiderPhone && (
+                    <p className='text-[11px] font-mono text-gray-500 font-bold'>
+                      +91 {lockedRiderPhone}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className='text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200'>
+                🔒 Assigned
+              </span>
+            </div>
+            <p className='text-[10px] text-gray-400 mt-2.5 pt-2 border-t border-gray-100 font-medium'>
+              This delivery is assigned to <strong className='text-slate-700'>{lockedRiderName}</strong>. Tap below when you pick up the bag from the store.
             </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className='bg-white rounded-2xl p-4 border border-gray-200 shadow-xs'>
+            <p className='text-[10px] uppercase font-black text-gray-400 tracking-wider mb-2'>
+              Who is delivering this order? (Select Rider)
+            </p>
+            <div className='grid grid-cols-2 gap-2'>
+              {activeStaffList.map((staff) => {
+                const isSelected = selectedStaff?._id === staff._id;
+                return (
+                  <button
+                    key={staff._id}
+                    type='button'
+                    onClick={() => handleSelectStaff(staff)}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-[#1B4332] text-white border-[#1B4332] shadow-sm'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span>{isSelected ? '✓' : '👤'}</span>
+                    <span>{staff.name}</span>
+                    {staff.isOnDelivery && !isSelected && (
+                      <span className='text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-bold'>
+                        On Bike
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedStaff && (
+              <p className='text-[10px] text-gray-400 mt-2 text-center font-medium'>
+                Rider: <strong className='text-gray-700'>{selectedStaff.name}</strong> • +91 {selectedStaff.phone}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Payment Status Card - Amount ONLY shown if COD */}
-        <div className={`rounded-2xl p-4 border shadow-xs ${
-          isCod
-            ? 'bg-amber-50 border-amber-300 text-amber-950'
-            : 'bg-emerald-50 border-emerald-300 text-emerald-950'
-        }`}>
+        <div
+          className={`rounded-2xl p-4 border shadow-xs ${
+            isCod ? 'bg-amber-50 border-amber-300 text-amber-950' : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+          }`}
+        >
           <div className='flex items-center justify-between gap-3'>
             <div>
-              <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                isCod ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
-              }`}>
+              <span
+                className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                  isCod ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
+                }`}
+              >
                 {isCod ? 'Cash on Delivery (COD)' : 'Prepaid (Paid Online)'}
               </span>
               <h3 className='text-sm font-black mt-1'>
@@ -386,11 +578,9 @@ export default function RiderTrackPage() {
               )}
             </div>
             {isCod && (
-              <div className='text-right shrink-0'>
-                <span className='text-[10px] font-bold text-amber-800 uppercase block'>Amount to Collect</span>
-                <span className='text-xl font-black font-mono text-amber-950'>
-                  {currency(orderAmount)}
-                </span>
+              <div className='text-right shrink-0 bg-white/70 py-1.5 px-3 rounded-xl border border-amber-300'>
+                <p className='text-[10px] font-bold uppercase text-amber-800'>Amount</p>
+                <p className='text-lg font-black font-mono text-amber-950'>{currency(orderAmount)}</p>
               </div>
             )}
           </div>
@@ -422,26 +612,71 @@ export default function RiderTrackPage() {
             </p>
           </div>
 
-          {/* Quick Bike Maps Button */}
-          <button
-            type='button'
-            onClick={launchGoogleMapsBikeNavigation}
-            className='w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border border-emerald-200 active:scale-98'
-          >
-            <span>🏍️ Open Bike Direction (Google Maps)</span>
-          </button>
+          {/* Embedded Leaflet Map Preview */}
+          {hasCoordinates && (
+            <div className='rounded-xl overflow-hidden border border-gray-200 h-44 my-2 relative'>
+              <MapContainer
+                center={[order.delivery.location.lat, order.delivery.location.lng]}
+                zoom={15}
+                scrollWheelZoom={false}
+                className='h-full w-full'
+              >
+                <TileLayer url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' />
+                <Marker position={[order.delivery.location.lat, order.delivery.location.lng]}>
+                  <Popup>Customer Delivery Location</Popup>
+                </Marker>
+                {currentCoords && (
+                  <Marker position={[currentCoords.lat, currentCoords.lng]}>
+                    <Popup>Your Bike Position</Popup>
+                  </Marker>
+                )}
+              </MapContainer>
+            </div>
+          )}
+
+          <div className='pt-1'>
+            <button
+              onClick={launchGoogleMapsBikeNavigation}
+              className='w-full py-3 px-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2'
+            >
+              <span>🏍️ Open Google Maps Two-Wheeler GPS</span>
+            </button>
+          </div>
         </div>
 
-        {/* Step 1: Order Picked Trigger (When Status is preparing or placed) */}
-        {order.status !== 'out_for_delivery' && order.status !== 'delivered' && order.status !== 'cancelled' && (
-          <div className='bg-white rounded-2xl p-5 border border-emerald-200 shadow-md text-center space-y-3'>
+        {/* Order Items to Hand Over */}
+        <div className='bg-white rounded-2xl p-4 border border-gray-200 shadow-xs space-y-2'>
+          <p className='text-[10px] uppercase font-bold text-gray-400 tracking-wider'>
+            Items to Deliver ({order.items?.length || 0})
+          </p>
+          <div className='divide-y divide-gray-100'>
+            {(order.items || []).map((it, idx) => (
+              <div key={idx} className='py-2 flex items-center justify-between text-xs'>
+                <div className='flex items-center gap-2'>
+                  <span className='w-5 h-5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold flex items-center justify-center text-[11px]'>
+                    {it.quantity}x
+                  </span>
+                  <span className='font-bold text-slate-800'>{it.productName}</span>
+                </div>
+                {it.variant && (
+                  <span className='text-[10px] text-gray-400 font-mono'>({it.variant})</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Step 1: Start Delivery Action (When status is placed or preparing) */}
+        {['placed', 'preparing'].includes(order.status) && (
+          <div className='bg-white rounded-2xl p-5 border border-emerald-300 shadow-md text-center space-y-3'>
             <div className='w-14 h-14 bg-emerald-100 text-emerald-800 rounded-full mx-auto flex items-center justify-center text-2xl'>
               🛵
             </div>
             <div>
               <h3 className='text-sm font-black text-slate-800'>Ready to Deliver?</h3>
               <p className='text-xs text-gray-500 mt-1 max-w-xs mx-auto'>
-                Tap below when you take the packed order and start your bike. This will notify the customer, activate GPS, and open Google Maps navigation.
+                Tap below when you take the packed order and start your bike. This will notify the customer, activate GPS,
+                and open Google Maps navigation.
               </p>
             </div>
 
@@ -453,9 +688,7 @@ export default function RiderTrackPage() {
               {isStartingDelivery ? (
                 <span>Starting Delivery...</span>
               ) : (
-                <>
-                  <span>🚀 Order Picked & Out for Delivery</span>
-                </>
+                <span>🚀 Order Picked & Out for Delivery</span>
               )}
             </button>
           </div>

@@ -27,12 +27,23 @@ export function getDeliveryBoyMessage(order, isBiller = false) {
     paymentText = `💰 Amount: ₹${amount} (${payType})`;
   }
 
+  const assignedStaffId = order.deliveryStaff?.staffId || '';
+  const assignedRiderName = order.deliveryStaff?.name || order.delivery?.riderName || '';
+  const assignedPhone = order.deliveryStaff?.phone || order.delivery?.riderPhone || '';
+
   const riderTrackToken = order.delivery?.riderTrackingToken || '';
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://apsara-ice-cream-mandya.vercel.app';
-  const riderTrackUrl = `${origin}/rider/track/${order._id}${riderTrackToken ? `?token=${riderTrackToken}` : ''}`;
+
+  const queryParts = [];
+  if (riderTrackToken) queryParts.push(`token=${encodeURIComponent(riderTrackToken)}`);
+  if (assignedStaffId) queryParts.push(`riderId=${encodeURIComponent(assignedStaffId)}`);
+  if (assignedRiderName) queryParts.push(`rider=${encodeURIComponent(assignedRiderName)}`);
+
+  const riderTrackUrl = `${origin}/rider/track/${order._id}${queryParts.length ? `?${queryParts.join('&')}` : ''}`;
+  const riderLine = assignedRiderName ? `🛵 Assigned Rider: ${assignedRiderName}\n` : '';
 
   return `🛵 Apsara Ice Cream Delivery ${orderNum}
-Customer: ${custName}${phoneText}
+${riderLine}Customer: ${custName}${phoneText}
 Address: ${address}
 📍 Maps: ${mapsUrl}
 ${paymentText}

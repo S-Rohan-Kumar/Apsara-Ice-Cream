@@ -82,17 +82,27 @@ const mapOffersToBanners = (offersList = []) => {
       ? o.imageUrl
       : (catImg && catImg.trim() !== '' ? catImg : fallbackImg);
 
+    const discountVal = Number(o.discountPercent || 0);
+    const hasDiscount = discountVal > 0;
+    const bannerTag = hasDiscount
+      ? `✨ ${discountVal}% OFF SPECIAL`
+      : '🥭 NEW ARRIVAL';
+    const bannerReqText = hasDiscount
+      ? (o.minOrderAmount > 0 ? `Orders above ₹${o.minOrderAmount}` : 'Limited time deal')
+      : 'Freshly Churned in Mandya';
+    const bannerCta = hasDiscount ? 'ORDER NOW' : 'EXPLORE SCOOPS';
+
     return {
       _id: o._id,
-      tag: `✨ ${o.discountPercent}% OFF SPECIAL`,
+      tag: bannerTag,
       title: o.title,
       subtitle: o.description && o.description.trim() !== ''
         ? o.description
         : o.category?.name
         ? `Special savings on ${o.category.name}`
         : 'Limited-time deal on freshly churned scoops',
-      requirementText: o.minOrderAmount > 0 ? `Orders above ₹${o.minOrderAmount}` : 'Limited time deal',
-      ctaText: 'ORDER NOW',
+      requirementText: bannerReqText,
+      ctaText: bannerCta,
       bg: '#064E3B',
       tagBg: '#10B981',
       accent: '#FDE047',
@@ -101,8 +111,8 @@ const mapOffersToBanners = (offersList = []) => {
       imageUrl: imageToUse,
       category: o.category,
       categoryId: catId,
-      discountPercent: o.discountPercent,
-      isOffer: true,
+      discountPercent: discountVal,
+      isOffer: hasDiscount,
     };
   });
 

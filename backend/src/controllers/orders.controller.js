@@ -12,6 +12,7 @@ import { APIError }     from '../utils/api-error.js';
 import { sendFCM }      from '../utils/send-fcm.js';
 import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated, emitOrderCancelled, emitRiderAssigned } from '../socket/socket.js';
 import { calculateDistanceKm, calculateDeliveryCharge } from '../utils/delivery.js';
+import { setCachedRiderLocation, getCachedRiderLocation, clearCachedRiderLocation, checkOtpRateLimit, recordOtpFailure, clearOtpFailures } from '../utils/orderCache.js';
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
   key_id    : process.env.RAZORPAY_KEY_ID,
@@ -389,7 +390,13 @@ const getOrderDetails = asyncHandler(async (req, res) => {
   if (order.customer.toString() !== req.user._id.toString()) {
     throw new APIError(403, 'Access denied');
   }
-  return res.status(200).json(new APIResponse(200, order, 'Order fetched'));
+  const cachedLoc = await getCachedRiderLocation(order._id);
+  const orderObj = order.toObject();
+  if (cachedLoc) {
+    if (!orderObj.delivery) orderObj.delivery = {};
+    orderObj.delivery.riderLocation = cachedLoc;
+  }
+  return res.status(200).json(new APIResponse(200, orderObj, 'Order fetched'));
 });
 
 // ─── POST /api/orders/:id/cancel ─────────────────────────────────────────────
@@ -669,6 +676,11 @@ const getRiderOrderDetails = asyncHandler(async (req, res) => {
   }
 
   const order = orderDoc.toObject();
+  const cachedLoc = await getCachedRiderLocation(orderDoc._id);
+  if (cachedLoc) {
+    if (!order.delivery) order.delivery = {};
+    order.delivery.riderLocation = cachedLoc;
+  }
   // Never expose delivery OTP to rider screen
   delete order.deliveryOtp;
 
@@ -718,19 +730,31 @@ const startRiderDelivery = asyncHandler(async (req, res) => {
     order.status = 'out_for_delivery';
   }
 
-  const staffName = name || 'Store Staff';
-  const staffPhone = phone || '';
+  // Enforce store-assigned rider if already assigned
+  let finalStaffId = staffId || null;
+  let finalStaffName = name || 'Store Staff';
+  let finalStaffPhone = phone || '';
+
+  if (order.deliveryStaff?.name || order.deliveryStaff?.staffId) {
+    finalStaffId = order.deliveryStaff.staffId || finalStaffId;
+    finalStaffName = order.deliveryStaff.name || finalStaffName;
+    finalStaffPhone = order.deliveryStaff.phone || finalStaffPhone;
+  }
 
   order.deliveryStaff = {
-    staffId: staffId || null,
-    name: staffName,
-    phone: staffPhone,
-    assignedAt: new Date(),
+    staffId: finalStaffId,
+    name: finalStaffName,
+    phone: finalStaffPhone,
+    assignedAt: order.deliveryStaff?.assignedAt || new Date(),
   };
 
+  if (finalStaffId) {
+    await Staff.findByIdAndUpdate(finalStaffId, { isOnDelivery: true }).catch(() => {});
+  }
+
   if (!order.delivery) order.delivery = {};
-  order.delivery.riderName = staffName;
-  order.delivery.riderPhone = staffPhone;
+  order.delivery.riderName = finalStaffName;
+  order.delivery.riderPhone = finalStaffPhone;
 
   await order.save();
 
@@ -799,8 +823,26 @@ const verifyRiderDeliveryOtp = asyncHandler(async (req, res) => {
     throw new APIError(400, `Order is not out for delivery (current status: ${order.status})`);
   }
 
-  if (!otp || String(otp).trim() !== String(order.deliveryOtp).trim()) {
+  await checkOtpRateLimit(order._id);
+
+  const cleanOtpInput = String(otp || '').trim();
+  const cleanOrderOtp = String(order.deliveryOtp || '').trim();
+  const isOtpValid = cleanOtpInput.length === cleanOrderOtp.length &&
+    crypto.timingSafeEqual(Buffer.from(cleanOtpInput), Buffer.from(cleanOrderOtp));
+
+  if (!isOtpValid) {
+    await recordOtpFailure(order._id);
     throw new APIError(400, 'Invalid Delivery OTP. Please ask the customer for their 4-digit OTP.');
+  }
+
+  await clearOtpFailures(order._id);
+  await clearCachedRiderLocation(order._id);
+
+  if (order.deliveryStaff?.staffId) {
+    await Staff.findByIdAndUpdate(order.deliveryStaff.staffId, {
+      isOnDelivery: false,
+      lastDeliveredAt: new Date(),
+    }).catch(() => {});
   }
 
   order.deliveryOtpVerified = true;
@@ -868,28 +910,83 @@ const updateRiderLocation = asyncHandler(async (req, res) => {
     throw new APIError(403, 'Invalid or missing rider tracking token');
   }
 
-  if (!order.delivery) order.delivery = {};
-  order.delivery.riderLocation = {
+  const loc = {
     lat: Number(lat),
     lng: Number(lng),
     heading: Number(heading || 0),
     updatedAt: new Date(),
   };
 
-  await order.save();
+  await setCachedRiderLocation(order._id, loc);
+  emitRiderLocationUpdated(order._id.toString(), loc);
 
-  emitRiderLocationUpdated(order._id.toString(), {
-    lat: Number(lat),
-    lng: Number(lng),
-    heading: Number(heading || 0),
-    updatedAt: order.delivery.riderLocation.updatedAt,
-  });
+  await Order.updateOne(
+    { _id: order._id },
+    { $set: { 'delivery.riderLocation': loc } }
+  );
 
   return res.status(200).json(new APIResponse(200, { success: true }, 'Rider location recorded'));
+});
+
+// ─── PATCH /api/orders/:id/assign-rider (Biller & Admin) ──────────────────────
+const assignRiderToOrder = asyncHandler(async (req, res) => {
+  const { staffId, name, phone } = req.body;
+  if (!staffId && !name) {
+    throw new APIError(400, 'staffId or rider name is required');
+  }
+
+  const order = await Order.findById(req.params.id);
+  if (!order) throw new APIError(404, 'Order not found');
+
+  if (order.status === 'delivered') {
+    throw new APIError(400, 'Cannot reassign rider for an already delivered order');
+  }
+  if (order.status === 'cancelled') {
+    throw new APIError(400, 'Cannot assign rider for a cancelled order');
+  }
+
+  let staffMember = null;
+  if (staffId) {
+    staffMember = await Staff.findById(staffId);
+  } else if (name) {
+    staffMember = await Staff.findOne({ name: new RegExp('^' + name.trim() + '$', 'i'), isActive: true });
+  }
+
+  const riderName = staffMember?.name || name || 'Store Staff';
+  const riderPhone = staffMember?.phone || phone || '';
+
+  if (order.deliveryStaff?.staffId && order.deliveryStaff.staffId.toString() !== (staffMember?._id?.toString() || staffId)) {
+    await Staff.findByIdAndUpdate(order.deliveryStaff.staffId, { isOnDelivery: false }).catch(() => {});
+  }
+
+  order.deliveryStaff = {
+    staffId: staffMember?._id ? staffMember._id.toString() : (staffId || null),
+    name: riderName,
+    phone: riderPhone,
+    assignedAt: new Date(),
+  };
+
+  if (!order.delivery) order.delivery = {};
+  order.delivery.riderName = riderName;
+  order.delivery.riderPhone = riderPhone;
+
+  const staffShortId = (staffMember?._id ? staffMember._id.toString() : (staffId || 'rider')).slice(-6);
+  order.delivery.riderTrackingToken = `${staffShortId}_${crypto.randomBytes(16).toString('hex')}`;
+
+  await order.save();
+
+  emitRiderAssigned(order._id.toString(), order.deliveryStaff);
+
+  return res.status(200).json(
+    new APIResponse(200, {
+      deliveryStaff: order.deliveryStaff,
+      riderTrackingToken: order.delivery.riderTrackingToken,
+    }, 'Rider assigned successfully to order')
+  );
 });
 
 export {
   initiateOrder, confirmOrder, getMyOrders, getOrderDetails,
   cancelOrder, getAdminOrders, getAdminOrderDetails, updateOrderStatus, getMonthlyReport,
-  getRiderOrderDetails, updateRiderLocation, startRiderDelivery, verifyRiderDeliveryOtp,
+  getRiderOrderDetails, updateRiderLocation, startRiderDelivery, verifyRiderDeliveryOtp, assignRiderToOrder,
 };

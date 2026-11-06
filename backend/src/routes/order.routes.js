@@ -13,6 +13,7 @@ import {
   updateRiderLocation,
   startRiderDelivery,
   verifyRiderDeliveryOtp,
+  assignRiderToOrder,
 } from "../controllers/orders.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import adminMiddleware from "../middleware/admin.middleware.js";
@@ -33,5 +34,6 @@ router.get("/:id", authMiddleware, getOrderDetails);
 router.get("/", authMiddleware, adminMiddleware, getAdminOrders);
 router.get("/admin/:id", authMiddleware, adminMiddleware, getAdminOrderDetails);
 router.patch("/:id/status", authMiddleware, adminMiddleware, updateOrderStatus);
+router.patch("/:id/assign-rider", authMiddleware, adminMiddleware, assignRiderToOrder);
 
 export default router;

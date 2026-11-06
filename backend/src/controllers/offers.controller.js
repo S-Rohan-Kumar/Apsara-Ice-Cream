@@ -33,17 +33,18 @@ const createOffer = asyncHandler(async (req, res) => {
   const {
     title, description, category,
     discountPercent, minOrderAmount, minQuantity,
-    startsAt, expiresAt,
+    startsAt, expiresAt, templateId, bannerType,
   } = req.body;
 
-  if (!title || !discountPercent || !startsAt || !expiresAt) {
-    throw new APIError(400, 'title, discountPercent, startsAt, expiresAt are required');
+  if (!title || !startsAt || !expiresAt) {
+    throw new APIError(400, 'title, startsAt, expiresAt are required');
   }
   if (new Date(expiresAt) <= new Date(startsAt)) {
     throw new APIError(400, 'expiresAt must be after startsAt');
   }
-  if (discountPercent < 1 || discountPercent > 100) {
-    throw new APIError(400, 'discountPercent must be between 1 and 100');
+  const discount = discountPercent !== undefined && discountPercent !== null ? Number(discountPercent) : 0;
+  if (discount < 0 || discount > 100) {
+    throw new APIError(400, 'discountPercent must be between 0 and 100');
   }
 
   let imageUrl = req.body.imageUrl || '';
@@ -56,12 +57,15 @@ const createOffer = asyncHandler(async (req, res) => {
     title: title.trim(),
     description: description ? description.trim() : '',
     category      : category || null,
-    discountPercent: Number(discountPercent),
+    discountPercent: discount,
     minOrderAmount : Number(minOrderAmount) || 0,
     minQuantity    : Number(minQuantity) > 0 ? Number(minQuantity) : 1,
     imageUrl,
     startsAt       : new Date(startsAt),
     expiresAt      : new Date(expiresAt),
+    templateId     : templateId || null,
+    bannerType     : bannerType || (discount > 0 ? 'offer' : 'arrival'),
+    isActive       : req.body.isActive !== undefined ? (req.body.isActive === 'true' || req.body.isActive === true) : true,
     createdBy      : req.user._id,
   });
 
@@ -71,7 +75,9 @@ const createOffer = asyncHandler(async (req, res) => {
   const shouldSendPush = req.body.sendPush === 'true' || req.body.sendPush === true;
   if (shouldSendPush) {
     try {
-      const pushTitle = `🎉 Special Offer: ${offer.title} (${offer.discountPercent}% OFF)`;
+      const pushTitle = offer.discountPercent > 0
+        ? `🎉 Special Offer: ${offer.title} (${offer.discountPercent}% OFF)`
+        : `🍨 New Arrival: ${offer.title}`;
       const pushBody = offer.description || `Get ${offer.discountPercent}% OFF! Limited time store offer.`;
 
       const broadcast = await Broadcast.create({
@@ -147,7 +153,7 @@ const updateOffer = asyncHandler(async (req, res) => {
 
   const allowed = [
     'title', 'description', 'discountPercent',
-    'minOrderAmount', 'minQuantity', 'startsAt', 'expiresAt', 'isActive', 'imageUrl',
+    'minOrderAmount', 'minQuantity', 'startsAt', 'expiresAt', 'isActive', 'imageUrl', 'templateId', 'bannerType',
   ];
   allowed.forEach(field => {
     if (req.body[field] !== undefined) offer[field] = req.body[field];

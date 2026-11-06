@@ -5,8 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const getBaseUrl = () => {
   if (Platform.OS === 'web') {
     return 'https://apsara-ice-cream-cj1s.onrender.com/api';
+    // return 'http://172.25.240.1:8000/api';
   }
   return 'https://apsara-ice-cream-cj1s.onrender.com/api';
+  // return 'http://172.25.240.1:8000/api';
 };
 
 const api = axios.create({

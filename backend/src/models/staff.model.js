@@ -21,6 +21,14 @@ const staffSchema = new Schema(
       type: Boolean,
       default: true,
     },
+    isOnDelivery: {
+      type: Boolean,
+      default: false,
+    },
+    lastDeliveredAt: {
+      type: Date,
+      default: null,
+    },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -31,5 +39,6 @@ const staffSchema = new Schema(
 
 staffSchema.index({ phone: 1 });
 staffSchema.index({ isActive: 1 });
+staffSchema.index({ isOnDelivery: 1, lastDeliveredAt: 1 });
 
 export default mongoose.model('Staff', staffSchema);
