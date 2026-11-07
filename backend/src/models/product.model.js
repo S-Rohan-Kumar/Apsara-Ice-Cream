@@ -11,6 +11,17 @@ const VariantAvailabilitySchema = new Schema(
     { _id: false },
 );
 
+const VariantStockSchema = new Schema(
+    {
+        small: { type: Number, default: 50, min: 0 },
+        regular: { type: Number, default: 50, min: 0 },
+        large: { type: Number, default: 50, min: 0 },
+        binge: { type: Number, default: 50, min: 0 },
+        shareIt: { type: Number, default: 50, min: 0 },
+    },
+    { _id: false },
+);
+
 const VariantSnoozeSchema = new Schema(
     {
         small: { type: Date, default: null },
@@ -47,6 +58,19 @@ const ProductSchema = new Schema(
                 shareIt: true,
             }),
         },
+        variantStock: {
+            type: VariantStockSchema,
+            default: () => ({
+                small: 50,
+                regular: 50,
+                large: 50,
+                binge: 50,
+                shareIt: 50,
+            }),
+        },
+        // Stock field for single-type products
+        stock: { type: Number, default: 50, min: 0 },
+
         variantSnoozedUntil: {
             type: VariantSnoozeSchema,
             default: () => ({

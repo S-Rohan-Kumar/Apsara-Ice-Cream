@@ -168,6 +168,11 @@ export default function OrderDetailPage() {
           <h1 className='text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3'>
             <span>Order {displayOrderNum}</span>
             <StatusBadge status={order.status} />
+            {order.status === 'placed' && order.gracePeriodEndsAt && new Date(order.gracePeriodEndsAt) > new Date() && !order.isGraceReleased && (
+              <span className='text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200'>
+                ⏳ 60s Grace Window
+              </span>
+            )}
           </h1>
         </div>
 
@@ -464,6 +469,11 @@ export default function OrderDetailPage() {
 
             {order.status === 'placed' && (
               <div className='space-y-2.5'>
+                {order.gracePeriodEndsAt && new Date(order.gracePeriodEndsAt) > new Date() && !order.isGraceReleased && (
+                  <div className='p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold text-center'>
+                    ⏳ Customer has 60s legal cancellation grace window. Chime rings when window completes.
+                  </div>
+                )}
                 <button
                   onClick={() => handleUpdate('preparing')}
                   disabled={updating}

@@ -13,6 +13,8 @@ import { sendFCM }      from '../utils/send-fcm.js';
 import { emitNewOrder, emitStatusUpdate, emitRiderLocationUpdated, emitOrderCancelled, emitRiderAssigned } from '../socket/socket.js';
 import { calculateDistanceKm, calculateDeliveryCharge } from '../utils/delivery.js';
 import { setCachedRiderLocation, getCachedRiderLocation, clearCachedRiderLocation, checkOtpRateLimit, recordOtpFailure, clearOtpFailures } from '../utils/orderCache.js';
+import { reserveInventory, releaseInventory } from '../services/inventory.service.js';
+import { scheduleKitchenRelease, cancelOrderGrace } from '../queues/orderGrace.queue.js';
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
   key_id    : process.env.RAZORPAY_KEY_ID,
@@ -277,6 +279,11 @@ const confirmOrder = asyncHandler(async (req, res) => {
   const total          = Math.max(0, subtotal - discount) + deliveryCharge + packagingFee;
 
   // Generate human-readable order number — ORD-001
+  // 1. Concurrency-safe atomic inventory reservation with auto-rollback
+  await reserveInventory(orderItems);
+
+  // 2. 60-Second cancellation grace period timestamp
+  const gracePeriodEndsAt = new Date(Date.now() + 60000);
   const orderNumber = await generateOrderNumber();
 
   let googleMapsUrl = '';
@@ -294,6 +301,8 @@ const confirmOrder = asyncHandler(async (req, res) => {
     customer: req.user._id,
     items   : orderItems,
     status  : 'placed',
+    gracePeriodEndsAt,
+    isGraceReleased: false,
     delivery: {
       address      : deliveryAddress,
       phone        : deliveryPhone,
@@ -311,14 +320,11 @@ const confirmOrder = asyncHandler(async (req, res) => {
     },
   });
 
-  // Notify admin via socket immediately
-  const populatedOrder = order.toObject ? order.toObject() : { ...order };
-  populatedOrder.customer = {
-    _id: req.user._id,
-    name: req.user.name || '',
-    phone: req.user.phone || '',
-  };
-  emitNewOrder(populatedOrder);
+  // Schedule BullMQ 60-second delayed job to release order to kitchen terminals
+  await scheduleKitchenRelease(order._id, 60000);
+
+  // Broadcast initial placed status update silently without ringing kitchen chime
+  emitStatusUpdate(order._id.toString(), 'placed');
 
   // Background non-blocking FCM notifications so customer checkout is instant
   setImmediate(async () => {
@@ -420,6 +426,12 @@ const cancelOrder = asyncHandler(async (req, res) => {
   if (elapsedSec > 65) {
     throw new APIError(400, 'Cancellation window expired. Orders can only be cancelled within 1 minute of booking.');
   }
+
+  // 1. Cancel delayed BullMQ kitchen release and memory timer
+  await cancelOrderGrace(order._id);
+
+  // 2. Atomically release/restore inventory reserved for this order
+  await releaseInventory(order.items);
 
   order.status = 'cancelled';
   order.cancellationReason = req.body?.reason || 'Cancelled by customer within 1 minute';
@@ -582,6 +594,14 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   if (status === 'out_for_delivery' && !order.delivery?.riderTrackingToken) {
     if (!order.delivery) order.delivery = {};
     order.delivery.riderTrackingToken = crypto.randomBytes(16).toString('hex');
+  }
+
+  if (status === 'preparing') {
+    order.isGraceReleased = true;
+    await cancelOrderGrace(order._id);
+  } else if (status === 'cancelled') {
+    await cancelOrderGrace(order._id);
+    await releaseInventory(order.items);
   }
 
   order.status = status;

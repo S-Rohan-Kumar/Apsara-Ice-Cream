@@ -17,6 +17,7 @@ export const getCurrentFinancialYear = () => {
 
 export const generateOrderNumber = async () => {
   const fy = getCurrentFinancialYear();
+  // Atomic increment with upsert to prevent any collision under concurrency
   const counter = await OrderCounter.findOneAndUpdate(
     { financialYear: fy },
     { $inc: { lastNumber: 1 } },
@@ -42,7 +43,7 @@ const OrderItemSchema = new Schema({
 }, { _id: false });
 
 const OrderSchema = new Schema({
-  // Keep 'unique: true' here; it handles both the constraint and the index
+  // Unique collision-free human-readable identifier
   orderNumber: { type: String, unique: true, sparse: true },
 
   customer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -52,6 +53,11 @@ const OrderSchema = new Schema({
     enum   : ['placed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'],
     default: 'placed',
   },
+
+  // 60-Second Cancellation Grace Period state machine
+  gracePeriodEndsAt: { type: Date, default: null },
+  isGraceReleased  : { type: Boolean, default: false },
+
   delivery: {
     address : { type: String, required: true },
     phone   : { type: String, required: true },
@@ -97,12 +103,17 @@ const OrderSchema = new Schema({
   cancelledAt       : { type: Date },
 }, { timestamps: true });
 
+// Pre-validate hook guarantees orderNumber is never null or collided
+OrderSchema.pre('validate', async function () {
+  if (!this.orderNumber) {
+    this.orderNumber = await generateOrderNumber();
+  }
+});
+
 // Compound indexes for query optimization
 OrderSchema.index({ customer: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
-
-// REMOVED: OrderSchema.index({ orderNumber: 1 });  <-- This was the duplicate
-
+OrderSchema.index({ gracePeriodEndsAt: 1, status: 1 });
 OrderSchema.index({ 'payment.razorpayOrderId': 1 }, { unique: true, sparse: true });
 
 export default mongoose.model('Order', OrderSchema);

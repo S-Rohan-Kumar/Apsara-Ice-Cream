@@ -9,15 +9,25 @@ dotenv.config({ path: resolve(__dirname, "../.env") });
 const { server } = await import("./app.js");
 const { default: connectDB } = await import("./db/index.js");
 const { initStockWorker } = await import("./queues/stock.worker.js");
+const { initOrderGraceWorker } = await import("./queues/orderGrace.worker.js");
+const { syncMissingProductStock } = await import("./services/inventory.service.js");
 const { default: Product } = await import("./models/product.model.js");
+const { default: Order } = await import("./models/order.model.js");
+const { releaseOrderToKitchen, scheduleKitchenRelease } = await import("./queues/orderGrace.queue.js");
 
 const PORT = process.env.PORT || 8000;
 
 connectDB()
     .then(async () => {
+        // Initialize BullMQ background workers
         initStockWorker();
+        initOrderGraceWorker();
 
         try {
+            // 1. Initialize inventory stock tracking for any legacy products
+            await syncMissingProductStock();
+
+            // 2. Restore expired snoozed products
             const now = new Date();
             const expiredCount = await Product.updateMany(
                 { isAvailable: false, snoozedUntil: { $lte: now } },
@@ -47,6 +57,21 @@ connectDB()
                 if (modified) {
                     p.isAvailable = Object.values(p.variantAvailability || {}).some(Boolean);
                     await p.save();
+                }
+            }
+
+            // 3. Resume any orders in grace period across server restarts
+            const pendingGraceOrders = await Order.find({
+                status: 'placed',
+                isGraceReleased: false,
+                gracePeriodEndsAt: { $ne: null },
+            });
+            for (const pOrder of pendingGraceOrders) {
+                const remainingMs = new Date(pOrder.gracePeriodEndsAt).getTime() - Date.now();
+                if (remainingMs <= 0) {
+                    await releaseOrderToKitchen(pOrder._id);
+                } else {
+                    await scheduleKitchenRelease(pOrder._id, remainingMs);
                 }
             }
         } catch (e) {

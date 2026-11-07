@@ -359,6 +359,13 @@ export function OrdersPage() {
                         {order.status.replace(/_/g, ' ')}
                       </span>
                     </div>
+
+                    {order.status === 'placed' && order.gracePeriodEndsAt && new Date(order.gracePeriodEndsAt) > new Date() && !order.isGraceReleased && (
+                      <div className='flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-semibold mt-1'>
+                        <span className='animate-pulse'>⏳</span>
+                        <span>60s Grace Window (Holding Kitchen Chime)</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
